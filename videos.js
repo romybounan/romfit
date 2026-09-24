@@ -1,5 +1,9 @@
 // Vidéos de démonstration par des coachs femmes (YouTube) — chaque identifiant vérifié via oEmbed.
 const VIDEOS = {
+ "leg-extension": {"videoId": "3pOsjZGe10k", "title": "HOW TO USE THE LEG EXTENSION MACHINE | COACH KELLY CUES", "author": "Kelly Matthews"},
+ "hyperextension": {"videoId": "BboDheDDH5Y", "title": "Back hyperextensions", "author": "Erin Stern"},
+ "releve-jambes": {"videoId": "Wp4BlxcFTkE", "title": "Lying Leg Raises", "author": "LivestrongWoman"},
+ "fentes-bulgares-pdc": {"videoId": "QD4P9Di7L20", "title": "How to Perform a Bulgarian Split Squat at Home", "author": "Get Strong with Emily"},
  "hip-thrust": {
   "videoId": "Zp26q4BY5HE",
   "title": "How To Do a Barbell Hip Thrust",

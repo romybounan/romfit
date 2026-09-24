@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v14';
+const APP_VERSION = 'v15';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -12,7 +12,7 @@ const store = {
   },
 };
 
-const KEYS = ['settings', 'loads', 'logs', 'plan', 'hours', 'health', 'weights', 'chat', 'reviews', 'feedback', 'active'];
+const KEYS = ['settings', 'loads', 'logs', 'plan', 'hours', 'health', 'weights', 'chat', 'reviews', 'feedback', 'active', 'runPlace', 'optChoice'];
 const state = {
   settings: store.get('settings', { name: '', week: DEFAULT_WEEK, hour: '12:30', apiKey: '', model: '', zone: null, profile: {} }),
   loads: store.get('loads', {}),        // charge de travail actuelle par exercice
@@ -25,6 +25,8 @@ const state = {
   reviews: store.get('reviews', {}),    // bilans hebdo du coach
   feedback: store.get('feedback', []),  // retours sur l'app
   active: store.get('active', null),    // séance en cours
+  runPlace: store.get('runPlace', {}),  // tapis ou dehors, par jour
+  optChoice: store.get('optChoice', {}), // vélo / marche inclinée / reformer, par jour
   view: 'today', weekOffset: 0, sheet: null, video: null, rest: null, chartEx: 'hip-thrust', mealsOpen: false, busy: false,
 };
 const save = (...keys) => (keys.length ? keys : KEYS).forEach((k) => store.set(k, state[k]));
@@ -123,24 +125,39 @@ function plannedLoad(id, week) {
 function sessionFor(d, slot = slotFor(d)) {
   if (!slot) return null;
   const week = weekNo(d);
-  if (slot.custom) return normalizeCustom(slot.custom, week);
+  if (slot.custom) return normalizeCustom(slot.custom, week, d);
   const def = SESSIONS[slot.key];
   if (!def) return null;
-  const base = { key: slot.key, name: def.name, kind: def.kind, week, optional: !!def.optional };
+  const dk = dateKey(d);
+  const base = { key: slot.key, name: def.name, kind: def.kind, week, optional: !!def.optional, date: dk };
   if (def.kind === 'salle') {
+    // Pause kiné : « haut du corps » devient une 2e séance jambes/fessiers, sans charge sur épaules et bras
+    if (inRehab(d)) {
+      const v = slot.key === 'upper' ? 'R2' : 'R1';
+      const lower = SESSIONS.lower;
+      return { ...base, key: slot.key, name: `${lower.name} ${v === 'R1' ? '1' : '2'}`, rehab: true, variant: v, minutes: 50, exercises: lower[v].map((id) => ({ id, sets: setsFor(week, EXERCISES[id]), load: plannedLoad(id, week) })) };
+    }
     const variant = variantFor(week);
     return { ...base, variant, minutes: def.minutes, exercises: def[variant].map((id) => ({ id, sets: setsFor(week, EXERCISES[id]), load: plannedLoad(id, week) })) };
   }
   if (def.kind === 'course') {
-    const steps = RUN_PLAN[week].map(([label, min]) => ({ label, min }));
-    return { ...base, minutes: steps.reduce((n, s) => n + s.min, 0), steps, tip: RUN_TIP };
+    const r = RUN_PLAN[week];
+    const place = state.runPlace[dk] || r.place;
+    const steps = r.steps.map(([label, min]) => ({ label, min }));
+    return { ...base, name: r.name, km: r.km, place, minutes: steps.reduce((n, x) => n + x.min, 0), steps, tip: RUN_TIP[place] };
   }
-  const ideas = week >= 5 ? [['Footing court', '15 à 20 min très lent, pour habituer tes jambes aux impacts'], ...OPTIONAL_IDEAS] : OPTIONAL_IDEAS;
-  return { ...base, minutes: def.minutes, steps: ideas.map(([label, text]) => ({ label, text })), choice: true };
+  // Séance optionnelle : l'activité choisie (vélo, marche inclinée, reformer)
+  const choice = state.optChoice[dk];
+  const c = OPTIONAL_CHOICES[choice];
+  return { ...base, name: c ? c.label : def.name, choice: choice || null, minutes: c ? c.min : def.minutes, steps: c ? [{ label: c.label, min: c.min, text: c.text }] : [] };
 }
 
-function normalizeCustom(c, week) {
-  const ids = (c.exercise_ids || []).filter((id) => EXERCISES[id]);
+const inRehab = (d) => { const k = dateKey(d); return typeof REHAB !== 'undefined' && k >= REHAB.from && k <= REHAB.to; };
+// Exercices qui sollicitent épaules ou bras (retirés des séances du coach pendant la pause kiné)
+const ARMS_LOAD = ['tirage-vertical', 'tirage-horizontal', 'rowing-haltere', 'developpe-epaules', 'triceps-poulie', 'pallof-press', 'pompes-inclinees', 'elevations-laterales', 'curl-halteres', 'gainage', 'gainage-lateral', 'crunch-poulie', 'goblet-squat', 'rdl-halteres', 'fentes-bulgares', 'step-up', 'pull-through'];
+
+function normalizeCustom(c, week, d) {
+  const ids = (c.exercise_ids || []).filter((id) => EXERCISES[id] && !(d && inRehab(d) && ARMS_LOAD.includes(id)));
   if (ids.length) {
     return { key: 'custom', name: c.name, kind: 'salle', week, custom: true, minutes: c.minutes || 45, exercises: ids.map((id) => ({ id, sets: setsFor(week, EXERCISES[id]), load: plannedLoad(id, week) })) };
   }
@@ -306,14 +323,63 @@ function nextSession(from) {
   return null;
 }
 
+// Tapis ou dehors (course)
+function placePicker(s) {
+  if (s.kind !== 'course' || s.custom) return '';
+  return `<div class="seg" role="group" aria-label="Où cours-tu ?">
+    ${[['tapis', 'Sur tapis'], ['dehors', 'Dehors']].map(([v, l]) => `<button class="${s.place === v ? 'on' : ''}" data-act="run-place" data-date="${s.date}" data-v="${v}">${l}</button>`).join('')}
+  </div>`;
+}
+
+// Vélo, marche inclinée ou reformer (séance optionnelle)
+function optPicker(s) {
+  if (!s.optional || s.custom) return '';
+  return `<div class="stack" style="gap: 6px">${s.choice ? '' : '<div class="foot" style="font-weight: 600">Choisis ton activité</div>'}
+    <div class="row" style="gap: 8px; flex-wrap: wrap">${Object.entries(OPTIONAL_CHOICES).map(([v, c]) => `<button class="chip ${s.choice === v ? 'solid' : 'soft'}" data-act="opt-choice" data-date="${s.date}" data-v="${v}">${esc(c.label)}</button>`).join('')}</div>
+  </div>`;
+}
+
+// Ce que la séance apporte à tes objectifs, d'après ses exercices
+function whySession(s) {
+  const out = [];
+  if (s.exercises) {
+    const m = {};
+    s.exercises.forEach((e) => EXERCISES[e.id].muscles.forEach((x) => { m[x] = (m[x] || 0) + e.sets; }));
+    const has = (k) => m[k] || 0;
+    if (has('Fessiers')) out.push(`Fessiers : ${has('Fessiers')} séries dédiées, dont le hip thrust, l’exercice le plus efficace pour des fessiers plus fermes et plus ronds.`);
+    if (has('Moyen fessier')) out.push('Haut et côté des fesses (moyen fessier) : donne du galbe et stabilise ton bassin et tes genoux à chaque foulée.');
+    if (has('Cuisses') || has('Ischios')) out.push('Cuisses et ischios : des jambes plus solides, qui encaissent mieux l’impact de la course et protègent tes genoux.');
+    if (has('Abdos') || has('Obliques')) out.push('Abdos : un tronc gainé pour une meilleure posture en courant et moins de fatigue dans le dos.');
+    if (has('Dos') || has('Épaules') || has('Biceps') || has('Triceps')) out.push('Haut du corps : dos et bras toniques, une posture plus droite, et l’équilibre avec le travail des jambes.');
+    if (s.rehab) out.push('Rien pour les épaules et les bras : ils récupèrent pendant ta kiné.');
+  } else if (s.kind === 'course') {
+    const t = { 'Course lente': 'Endurance de base : ton cœur apprend à travailler sans s’emballer, et tes jambes s’habituent à l’impact en douceur.', 'Course progressive': 'Apprendre à accélérer en fin de sortie : plus de cardio et d’aisance, sans te mettre dans le rouge dès le début.', 'Fractionné': 'Des pointes de vitesse courtes : ton cardio progresse vite et tes jambes deviennent plus toniques.' };
+    out.push(t[s.name] || 'Cardio et endurance : ta forme générale progresse séance après séance.');
+    out.push('La course fait aussi travailler fessiers, mollets et cuisses à chaque foulée, en complément de la muscu.');
+    if (s.km) out.push(`Objectif du jour : ${fmtNum(s.km)} km, pour progresser un peu chaque semaine.`);
+  } else if (s.optional) {
+    const t = {
+      velo: ['Cardio sans impact : tu entretiens ton endurance tout en laissant tes articulations récupérer.', 'Travaille aussi les cuisses et les fessiers en douceur.'],
+      marche: ['La marche inclinée sollicite fortement les fessiers et les mollets, sans l’impact de la course.', 'Cardio doux qui active la circulation dans les jambes.'],
+      reformer: ['Travaille les muscles profonds et secondaires (gainage, stabilisateurs des hanches), souvent oubliés en salle.', 'Améliore ta posture et ta mobilité, utiles pour la course.'],
+    };
+    out.push(...(t[s.choice] || ['Une séance bonus pour bouger en douceur : vélo, marche inclinée ou reformer, au choix.']));
+  }
+  if (!out.length) return '';
+  return `<div class="stack" style="gap: 6px; background: var(--violet-soft); border-radius: 12px; padding: 12px">
+    <div class="hdr" style="color: var(--violet-text); font-size: 14px">${ic('sparkle', 15, 'var(--violet-text)')}Pourquoi cette séance</div>
+    ${out.slice(0, 3).map((t) => `<div class="row" style="gap: 8px; align-items: flex-start; font-size: 14px; line-height: 19px">${ic('check', 16, 'var(--violet-text)', 2.6)}<span>${esc(t)}</span></div>`).join('')}
+  </div>`;
+}
+
 function sessionCard(s, d) {
   const icon = kindIcon[s.kind] || kindIcon.douce;
   const phase = phaseFor(s.week);
   const thumbs = s.exercises ? s.exercises.slice(0, 3).map((e) => thumb(e.id)).filter(Boolean) : [];
   const hour = state.hours[dateKey(d)] || state.settings.hour;
   const meta = s.exercises
-    ? `${s.exercises.length} exercices · environ ${s.minutes} min · Semaine ${s.week} · ${phase.name}`
-    : `${s.minutes} min · Semaine ${s.week} · ${phase.name}`;
+    ? `${s.exercises.length} exercices · environ ${s.minutes} min · Semaine ${s.week} · ${s.rehab ? 'Pause kiné' : phase.name}`
+    : s.km ? `${fmtNum(s.km)} km · environ ${s.minutes} min · Semaine ${s.week}` : `${s.minutes} min · Semaine ${s.week}`;
   return `<section class="card" style="padding: 0; overflow: hidden">
     ${thumbs.length === 3 ? `<div class="grid3" style="gap: 2px">${thumbs.map((t) => `<img src="${t}" alt="" style="width: 100%; height: 104px; object-fit: cover" loading="lazy">`).join('')}</div>` : ''}
     <div class="stack" style="padding: 14px 16px 16px">
@@ -323,6 +389,8 @@ function sessionCard(s, d) {
       </div>
       <div style="font-size: 22px; line-height: 27px; font-weight: 700">${esc(s.name)}</div>
       <div class="sub">${meta}</div>
+      ${placePicker(s)}${optPicker(s)}
+      ${whySession(s)}
       <button class="link" data-act="preview" data-date="${dateKey(d)}" style="font-size: 15px; font-weight: 600; align-self: flex-start">${s.exercises ? 'Voir les exercices' : 'Voir le déroulé'} ${ic('chevR', 14, 'var(--violet-text)', 2.4)}</button>
       <label class="row" style="background: var(--fill); border-radius: 12px; padding: 10px 12px; gap: 10px; font-size: 15px">
         ${ic('clock', 18, 'var(--violet-text)')}<span class="grow">Prévue à</span>
@@ -439,7 +507,7 @@ function viewPlanning() {
       <button class="grow" style="text-align: left; min-width: 0" ${done ? `data-act="log-detail" data-id="${logsOn(d).slice(-1)[0].id}"` : s ? `data-act="preview" data-date="${dateKey(d)}"` : ''}>
         <div style="font-size: 16px; font-weight: 600; color: ${s || extra ? 'var(--label)' : '#8E8A9C'}">${s ? esc(s.name) : extra ? esc(extra.name) : 'Repos'}</div>
         ${extra ? `<div class="foot">${extra.durationMin} min${extra.km ? ` · ${fmtNum(extra.km)} km` : ''}</div>` : ''}
-        ${s ? `<div class="foot">${s.kind === 'salle' ? 'Salle' : s.kind === 'course' ? 'Zone 2' : 'Vélo, marche ou reformer'} · ${s.minutes} min</div>` : ''}
+        ${s ? `<div class="foot">${s.kind === 'salle' ? `Salle · ${s.minutes} min` : s.kind === 'course' ? `${s.km ? fmtNum(s.km) + ' km · ' : ''}${s.place === 'tapis' ? 'Tapis' : 'Dehors'}` : s.choice ? `${s.minutes} min` : 'Vélo, marche inclinée ou reformer'}</div>` : ''}
       </button>
       ${right}
       ${canDrag ? `<span class="grip" data-grip="${i}" aria-label="Glisser pour changer de jour">${ic('grip', 18, '#B7B2C6')}</span>` : ''}
@@ -455,7 +523,7 @@ function viewPlanning() {
   </div>
   <section class="card row" style="margin-top: 16px; padding: 12px 16px">
     <div class="ico" style="background: var(--violet-soft)">${ic('sparkle', 17, 'var(--violet-text)')}</div>
-    <div class="foot" style="color: var(--label); font-size: 14px">3 séances prioritaires + 1 optionnelle. Pour changer de jour, maintiens la poignée et fais glisser la séance.</div>
+    <div class="foot" style="color: var(--label); font-size: 14px">${inRehab(base) || inRehab(addDays(base, 6)) ? `<b>Pause épaules et bras jusqu'au ${fmtShort(parseKey(REHAB.to))}</b> (kiné) : 2 séances jambes et fessiers, 1 course, 1 séance optionnelle.` : '3 séances prioritaires + 1 optionnelle.'} Pour changer de jour, maintiens la poignée et fais glisser la séance.</div>
   </section>
   <div class="list" id="daylist" data-week="${dateKey(base)}" style="margin-top: 16px">${rows}</div>
   ${state.plan[wkKey(base)] ? `<button class="link" data-act="reset-week" style="margin: 10px 4px 0; font-size: 15px">Rétablir la semaine type</button>` : ''}
@@ -553,6 +621,8 @@ function daySheet(dk) {
       <div><div style="font-size: 20px; font-weight: 700">${esc(s.name)}</div><div class="sub">${DAYS[dayIdx(d)]} ${d.getDate()} · ${s.minutes} min</div></div></div>
       <button class="x" data-act="close-sheet" aria-label="Fermer">${ic('close', 14, 'var(--sec)', 2.4)}</button>
     </div>
+    ${placePicker(s)}${optPicker(s)}
+    ${whySession(s)}
     ${sessionPreview(s)}
     ${dk === dateKey() ? `<button class="btn p block" data-act="start" data-date="${dk}">${ic('play', 16, '#fff')}Commencer la séance</button>` : ''}
     ${!done && d <= today ? `<div class="stack" style="gap: 8px"><div class="foot" style="font-weight: 600">Tu l'as faite sans l'app ?</div>
@@ -643,8 +713,8 @@ function viewProgramme() {
   <p class="foot" style="margin: 8px 4px 0">Estimation : les charges s'ajustent à chaque séance selon ce que tu réussis.</p>
   <section class="card stack" style="margin-top: 12px; gap: 6px">
     <div class="hdr" style="color: var(--run)">${ic('run', 16, 'var(--run)')}Course lente</div>
-    <div><span class="big">20</span><span class="unit"> min en alternant → </span><span class="big" style="color: var(--run)">40</span><span class="unit"> min sans marcher</span></div>
-    <div class="foot">${esc(RUN_TIP)}</div>
+    <div><span class="big">3</span><span class="unit"> km → </span><span class="big" style="color: var(--run)">6</span><span class="unit"> km mi-décembre</span></div>
+    <div class="foot">Une sortie par semaine, en alternant course lente, course progressive et fractionné. Tu choisis à chaque fois : tapis ou dehors.</div>
   </section>
   <section class="card stack" style="margin-top: 12px">
     <div class="hdr" style="color: var(--violet-text)">${ic('sparkle', 16, 'var(--violet-text)')}Comment tes charges progressent</div>
@@ -696,7 +766,8 @@ function viewWorkout() {
 
   if (a.kind !== 'salle') {
     return head + `
-    <p class="sub" style="margin: 16px 4px">${esc(s.tip || (s.choice ? 'Choisis l’activité qui te fait envie aujourd’hui.' : ''))}</p>
+    <div class="stack" style="margin: 16px 0 12px">${placePicker(s)}${optPicker(s)}</div>
+    ${s.tip ? `<p class="sub" style="margin: 0 4px 12px">${esc(s.tip)}</p>` : ''}
     <div class="list">${s.steps.map((st, j) => `<button class="li" data-act="step" data-j="${j}" style="width: 100%; text-align: left">
       ${st.min ? `<b style="color: var(--run); width: 52px; flex: none">${st.min} min</b>` : ''}
       <div class="grow"><div style="font-size: 16px; ${a.steps[j] ? 'color: var(--ter); text-decoration: line-through' : ''}">${esc(st.label)}</div>${st.text ? `<div class="foot">${esc(st.text)}</div>` : ''}</div>
@@ -744,6 +815,7 @@ function viewWorkout() {
         <span class="chip grey">${e.sets} × ${target} · repos ${rest} s</span>
       </div>
       <div class="sub" style="color: var(--label)">${esc(ex.cue)}</div>
+      ${s.rehab && e.id === 'hip-thrust' ? `<div class="note">${ic('sparkle', 16, 'var(--violet-text)')}<span>Pause kiné : si tenir la barre gêne ton épaule, utilise la machine à hip thrust ou fais un pont fessier au sol avec un disque posé sur les hanches.</span></div>` : ''}
       ${s.week <= 2 && !ex.bodyweight ? `<div class="note">${ic('sparkle', 16, 'var(--violet-text)')}<span>Reprise : choisis une charge qui te laisse 2 à 3 répétitions en réserve. Ajuste le poids prévu si besoin, l'app s'adapte.</span></div>` : ''}
       ${last ? `<div class="row" style="gap: 8px; background: var(--fill); border-radius: 10px; padding: 10px 12px">${ic('clock', 16, 'var(--sec)')}<span class="foot" style="color: var(--label)">Dernière fois : ${last.map((x) => ex.unit === 'time' ? `${x.reps} s` : x.kg ? `${x.kg} kg × ${x.reps}` : `${x.reps}`).join(' · ')}</span></div>` : ''}
       ${planned ? `<div class="row" style="gap: 8px; color: var(--violet-text); font-size: 14px; font-weight: 600">${ic('arrowUp', 16, 'var(--violet-text)', 2.4)}Prévu aujourd'hui : ${planned}</div>` : ''}
@@ -1184,6 +1256,8 @@ const ACTIONS = {
   },
   resume: () => { state.view = 'workout'; render(); scrollTo(0, 0); },
   preview: (t) => { state.sheet = { type: 'day', arg: t.dataset.date }; render(); },
+  'run-place': (t) => { state.runPlace[t.dataset.date] = t.dataset.v; save('runPlace'); render(); },
+  'opt-choice': (t) => { state.optChoice[t.dataset.date] = t.dataset.v; save('optChoice'); render(); },
   'mark-done': (t) => {
     const dk = t.dataset.date;
     const s = sessionFor(parseKey(dk));

@@ -32,6 +32,10 @@ const EXERCISES = {
   'curl-halteres':       { name: 'Curl biceps haltères', muscles: ['Biceps'], unit: 'reps', reps: [10, 12], base: 5, inc: 1, perHand: true, cue: 'Coudes fixes le long du corps, monte et descends lentement.' },
   'pull-through':        { name: 'Pull-through à la poulie', muscles: ['Fessiers', 'Ischios'], unit: 'reps', reps: [12, 15], base: 15, inc: 2.5, cue: 'Dos à la poulie, corde entre les jambes. Pousse les hanches vers l’avant en serrant les fessiers.' },
   'crunch-poulie':       { name: 'Crunch à la poulie', muscles: ['Abdos'], unit: 'reps', reps: [12, 15], base: 15, inc: 2.5, cue: 'À genoux face à la poulie haute, corde près des oreilles. Enroule le buste en rapprochant les coudes des genoux, sans bouger les hanches. Expire en descendant.' },
+  'leg-extension':       { name: 'Leg extension', muscles: ['Cuisses'], unit: 'reps', reps: [10, 12], base: 20, inc: 2.5, cue: 'Dos calé, tends les jambes en contrôlant, marque une pause jambes tendues, puis redescends lentement.' },
+  'hyperextension':      { name: 'Extension au banc à 45°', muscles: ['Fessiers', 'Ischios'], unit: 'reps', reps: [12, 15], base: 0, inc: 0, bodyweight: true, cue: 'Bras croisés sur la poitrine, dos légèrement arrondi, remonte en serrant fort les fessiers. Plus tard, tu pourras tenir un disque contre la poitrine.' },
+  'releve-jambes':       { name: 'Relevés de jambes allongée', muscles: ['Abdos'], unit: 'reps', reps: [10, 15], base: 0, inc: 0, bodyweight: true, cue: 'Allongée, bras le long du corps, bas du dos plaqué au sol. Monte les jambes tendues (ou genoux pliés pour commencer), redescends lentement sans toucher le sol.' },
+  'fentes-bulgares-pdc': { name: 'Fentes bulgares (poids du corps)', muscles: ['Fessiers', 'Cuisses'], unit: 'reps', reps: [10, 12], base: 0, inc: 0, bodyweight: true, perSide: true, cue: 'Pied arrière sur le banc, mains sur les hanches, buste légèrement penché en avant pour cibler les fessiers. Chaque jambe.' },
   'gainage-lateral':     { name: 'Gainage latéral', muscles: ['Obliques'], unit: 'time', base: 20, inc: 5, perSide: true, cue: 'Sur l’avant-bras, hanches hautes, corps aligné. Chaque côté.' },
 };
 
@@ -41,6 +45,9 @@ const SESSIONS = {
     name: 'Fessiers & jambes', kind: 'salle', minutes: 50,
     A: ['hip-thrust', 'goblet-squat', 'rdl-halteres', 'fentes-bulgares', 'abduction-machine', 'tirage-horizontal'],
     B: ['hip-thrust', 'presse-cuisses', 'leg-curl', 'step-up', 'kickback-poulie', 'rowing-haltere'],
+    // Pause kiné (épaules et bras au repos) : machines et poids du corps, rien à porter
+    R1: ['hip-thrust', 'presse-cuisses', 'leg-curl', 'abduction-machine', 'pont-unilateral', 'releve-jambes'],
+    R2: ['hip-thrust', 'leg-extension', 'hyperextension', 'fentes-bulgares-pdc', 'kickback-poulie', 'releve-jambes'],
   },
   upper: {
     name: 'Haut du corps & fessiers', kind: 'salle', minutes: 55,
@@ -50,6 +57,9 @@ const SESSIONS = {
   run: { name: 'Course lente', kind: 'course' },
   optional: { name: 'Activité douce', kind: 'douce', minutes: 45, optional: true },
 };
+
+// Pause épaules et bras (kiné) : la séance « haut du corps » devient une 2e séance jambes/fessiers
+const REHAB = { from: '2026-09-25', to: '2026-10-18', label: 'Pause épaules et bras (kiné)' };
 
 // Jours par défaut (0 = lundi) — modifiables dans les réglages
 const DEFAULT_WEEK = { 0: 'lower', 2: 'run', 4: 'upper', 5: 'optional' };
@@ -73,31 +83,31 @@ function setsFor(week, ex) {
   return 3;
 }
 
-// Course lente (zone 2) : progression marche/course vers 40 min en continu
-const RUN_PLAN = {
-  1:  [['Marche rapide', 5], ['6 × (2 min course lente + 2 min marche)', 24], ['Marche + étirements', 5]],
-  2:  [['Marche rapide', 5], ['6 × (3 min course lente + 1 min 30 marche)', 27], ['Marche + étirements', 5]],
-  3:  [['Marche rapide', 5], ['5 × (4 min course lente + 1 min marche)', 25], ['Marche + étirements', 5]],
-  4:  [['Marche rapide', 5], ['4 × (6 min course lente + 1 min marche)', 28], ['Marche + étirements', 5]],
-  5:  [['Marche rapide', 5], ['3 × (8 min course lente + 1 min marche)', 27], ['Marche + étirements', 5]],
-  6:  [['Marche rapide', 5], ['3 × (10 min course lente + 1 min marche)', 33], ['Marche + étirements', 5]],
-  7:  [['Marche rapide', 5], ['2 × (10 min course lente + 2 min marche)', 24], ['Marche + étirements', 5]],
-  8:  [['Marche rapide', 5], ['2 × (12 min course lente + 2 min marche)', 28], ['Marche + étirements', 5]],
-  9:  [['Marche rapide', 5], ['2 × (15 min course lente + 1 min marche)', 31], ['Marche + étirements', 5]],
-  10: [['Marche rapide', 5], ['25 min de course lente sans marcher', 25], ['Marche + étirements', 5]],
-  11: [['Marche rapide', 5], ['30 min de course lente sans marcher', 30], ['Marche + étirements', 5]],
-  12: [['Marche rapide', 5], ['20 min de course lente', 20], ['Marche + étirements', 5]],
-  13: [['Marche rapide', 5], ['30 min de course lente sans marcher', 30], ['Marche + étirements', 5]],
-  14: [['Marche rapide', 5], ['35 min de course lente sans marcher', 35], ['Marche + étirements', 5]],
-  15: [['Marche rapide', 5], ['40 min de course lente sans marcher', 40], ['Marche + étirements', 5]],
+// Course : 1 sortie par semaine, 3 km minimum. place = tapis ou dehors par défaut (modifiable à chaque fois)
+const km = (v) => String(v).replace('.', ',');
+const RUN_TYPES = {
+  lente: (d) => ({ name: 'Course lente', place: 'tapis', km: d, steps: [['Marche rapide pour t’échauffer', 5], [`${km(d)} km de course lente : tu dois pouvoir parler`, Math.round(d * 10)], ['Marche + étirements', 5]] }),
+  progressive: (d) => ({ name: 'Course progressive', place: 'dehors', km: d, steps: [['Échauffement : marche rapide puis trot', 6], [`${km(Math.round(d * 0.4 * 2) / 2)} km facile`, Math.round(d * 0.4 * 10)], [`${km(Math.round(d * 0.35 * 2) / 2)} km un peu plus vite (tu peux encore dire quelques mots)`, Math.round(d * 0.35 * 9)], [`${km(Math.round(d * 0.25 * 2) / 2)} km soutenu (respiration forte mais contrôlée)`, Math.round(d * 0.25 * 8)], ['Marche + étirements', 5]] }),
+  fractionne: (n) => ({ name: 'Fractionné', place: 'dehors', km: 3.5, steps: [['Échauffement : 1 km très facile', 10], [`${n} × (1 min rapide + 1 min 30 en trottinant)`, Math.round(n * 2.5)], ['1 km facile', 10], ['Marche + étirements', 5]] }),
 };
-const RUN_TIP = 'Allure où tu peux parler en faisant des phrases. Si ton cœur s’emballe, ralentis ou marche : c’est normal au début.';
+const RUN_PLAN = {
+  1: RUN_TYPES.lente(3), 2: RUN_TYPES.lente(3.5), 3: RUN_TYPES.progressive(4), 4: RUN_TYPES.fractionne(6),
+  5: RUN_TYPES.lente(4), 6: RUN_TYPES.progressive(4.5), 7: RUN_TYPES.lente(3), 8: RUN_TYPES.fractionne(8),
+  9: RUN_TYPES.lente(5), 10: RUN_TYPES.progressive(5), 11: RUN_TYPES.fractionne(8), 12: RUN_TYPES.lente(3.5),
+  13: RUN_TYPES.lente(5.5), 14: RUN_TYPES.progressive(5), 15: RUN_TYPES.lente(6),
+};
+const RUN_TIP = {
+  tapis: 'Sur tapis : mets 1 % d’inclinaison, ça reproduit l’effort dehors. Si ton cœur s’emballe, baisse la vitesse.',
+  dehors: 'Dehors : choisis un parcours plutôt plat. Si ton cœur s’emballe, ralentis ou marche un peu, c’est normal.',
+};
 
-const OPTIONAL_IDEAS = [
-  ['Vélo tranquille', '45 min à allure facile'],
-  ['Marche rapide', '45 min à 1 h, en côte si possible'],
-  ['Reformer / pilates', 'Un cours pour travailler les muscles profonds'],
-];
+// Séance optionnelle : tu choisis l'activité
+const OPTIONAL_CHOICES = {
+  velo: { label: 'Vélo', min: 45, text: 'Vélo ou vélo d’appartement à allure facile : tu dois pouvoir parler.' },
+  marche: { label: 'Marche inclinée', min: 40, text: 'Tapis incliné à 8-12 %, 5 à 5,5 km/h, sans te tenir aux barres.' },
+  reformer: { label: 'Reformer', min: 50, text: 'Un cours de reformer ou de pilates. Pendant la kiné, préviens la prof pour éviter les appuis sur les bras.' },
+};
+
 
 // ── Repas : protéines ≈ 1,6 g/kg/jour (ISSN 1,4–2,0 g/kg)
 const PROTEIN_TARGET = 90;

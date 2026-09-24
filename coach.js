@@ -140,6 +140,7 @@ function coachContext() {
       engagement: '3 séances prioritaires par semaine + 1 optionnelle.',
       heure_habituelle: state.settings.hour,
       zone_poids_kg: state.settings.zone,
+      pause_kine: typeof REHAB !== 'undefined' ? `${REHAB.label} du ${REHAB.from} au ${REHAB.to} : aucun exercice pour les épaules et les bras, rien à porter à bout de bras, pas de gainage sur les bras. 2 séances jambes/fessiers par semaine, 1 course (3 km minimum, sur tapis ou dehors), 1 séance optionnelle (vélo, marche inclinée ou reformer).` : null,
     },
     programme: { semaine: week, sur: 15, phase: phaseFor(week).name, fin: PROGRAM_END, seances_types: Object.fromEntries(Object.entries(SESSIONS).map(([k, s]) => [k, s.name])) },
     exercices_disponibles: Object.fromEntries(Object.entries(EXERCISES).map(([id, e]) => [id, e.name])),
@@ -163,6 +164,7 @@ Règles :
   • "replace_session" : remplacer la séance d'un jour (date + session). Si elle veut changer le sport du jour, donne d'abord ton avis honnête (récupération, équilibre de la semaine, sommeil). Pour la salle, uniquement des exercise_ids de la liste fournie ; pour le cardio ou une activité douce, des steps avec des minutes.
   • "move_session" : déplacer une séance (date d'origine, to_date dans la même semaine).
 - Si aucune modification n'est nécessaire, "actions" est une liste vide.
+- Pause kiné (voir profil.pause_kine) : pendant ces dates, ne propose JAMAIS d'exercice qui sollicite les épaules ou les bras (tirages, développés, curls, triceps, pompes, gainage sur les bras, haltères tenus en main). Utilise les exercices sans charge sur le haut du corps : hip-thrust, presse-cuisses, leg-curl, leg-extension, abduction-machine, kickback-poulie, hyperextension, pont-unilateral, fentes-bulgares-pdc, releve-jambes, dead-bug.
 - Signes d'alerte (douleur dans la poitrine, malaise ou vertige, palpitations inhabituelles, essoufflement disproportionné) : arrêt immédiat de l'effort et consultation médicale. Tu n'es pas médecin.
 - Malade ou fièvre : pas de séance. Courbatures : reprise légère possible. Douleur articulaire ou vive : arrêt de l'exercice et avis d'un professionnel de santé.
 - Signes de manque d'énergie (poids qui baisse, règles irrégulières ou absentes, fatigue persistante) : lui conseiller de manger davantage et d'en parler à un médecin.
