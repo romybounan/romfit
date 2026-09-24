@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v21';
+const APP_VERSION = 'v22';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -456,6 +456,7 @@ function healthTiles(d) {
       <div class="foot">Apple Watch</div>
     </section>
   </div>
+  <button class="btn t block sm" data-act="health-paste" style="margin-top: 12px">${ic('watch', 16, 'var(--violet-text)')}Importer ma séance Apple Watch</button>
   <button class="foot row" data-act="health-sync" style="gap: 6px; margin: 8px 4px 0">${ic('watch', 14, 'var(--sec)')}${last ? `Données du ${fmtShort(parseKey(last))} · ` : ''}<span style="color: var(--violet-text); font-weight: 600">Synchroniser Santé</span></button>`;
 }
 
@@ -1167,6 +1168,13 @@ function parseHealthText(text) {
         if (/_h\b|heure/.test(key) || v <= 24) v *= 60; else if (/_s\b|seconde/.test(key) || v > 1440) v /= 60;
       }
       out.sommeil_min = Math.round(v);
+    } else if (/^seance/.test(key)) {
+      const v = num(raw);
+      if (v == null) return;
+      if (/km|dist/.test(key)) out.seance_km = v > 100 ? v / 1000 : v;      // mètres → km si besoin
+      else if (/kcal|cal/.test(key)) out.seance_kcal = v;
+      else if (/fc|cardi|bpm/.test(key)) out.seance_fc = v;
+      else if (/min|dur/.test(key)) out.seance_min = v > 300 ? v / 60 : v;   // secondes → minutes si besoin
     } else if (/repos|resting/.test(key)) out.fc_repos = num(raw);
     else if (/pas|steps/.test(key)) out.pas = num(raw);
     else if (/kcal|energie|calorie/.test(key)) out.kcal_actives = num(raw);
@@ -1192,6 +1200,18 @@ function importHealth(text) {
     if (d.pas != null) cur.steps = +d.pas;
     if (d.kcal_actives != null) cur.kcal = +d.kcal_actives;
     state.health[key] = cur;
+    if (d.seance_km != null || d.seance_min != null || d.seance_kcal != null || d.seance_fc != null) {
+      const round = (v, k = 1) => (v == null || isNaN(v) ? null : Math.round(v * k) / k);
+      const perf = { minutes: round(d.seance_min), km: round(d.seance_km, 100), hr: round(d.seance_fc), kcal: round(d.seance_kcal) };
+      const existing = state.logs.filter((l) => l.dateKey === key).slice(-1)[0];
+      if (existing) {
+        if (perf.minutes) existing.durationMin = perf.minutes;
+        if (perf.km) existing.km = perf.km;
+        existing.watch = { ...(existing.watch || {}), ...(perf.hr ? { hr: perf.hr } : {}), ...(perf.kcal ? { kcal: perf.kcal } : {}) };
+        save('logs');
+      } else logManual(key, perf);
+      state.lastWorkoutImport = key;
+    }
     if (d.poids != null && +d.poids > 30) { state.weights = state.weights.filter((w) => w.date !== key); state.weights.push({ date: key, kg: +d.poids }); state.weights.sort((a, b) => a.date.localeCompare(b.date)); }
     n++;
   });
