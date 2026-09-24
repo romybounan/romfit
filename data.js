@@ -31,6 +31,7 @@ const EXERCISES = {
   'elevations-laterales':{ name: 'Élévations latérales', muscles: ['Épaules'], unit: 'reps', reps: [12, 15], base: 3, inc: 1, perHand: true, cue: 'Bras légèrement fléchis, monte jusqu’à la hauteur des épaules, sans élan.' },
   'curl-halteres':       { name: 'Curl biceps haltères', muscles: ['Biceps'], unit: 'reps', reps: [10, 12], base: 5, inc: 1, perHand: true, cue: 'Coudes fixes le long du corps, monte et descends lentement.' },
   'pull-through':        { name: 'Pull-through à la poulie', muscles: ['Fessiers', 'Ischios'], unit: 'reps', reps: [12, 15], base: 15, inc: 2.5, cue: 'Dos à la poulie, corde entre les jambes. Pousse les hanches vers l’avant en serrant les fessiers.' },
+  'crunch-poulie':       { name: 'Crunch à la poulie', muscles: ['Abdos'], unit: 'reps', reps: [12, 15], base: 15, inc: 2.5, cue: 'À genoux face à la poulie haute, corde près des oreilles. Enroule le buste en rapprochant les coudes des genoux, sans bouger les hanches. Expire en descendant.' },
   'gainage-lateral':     { name: 'Gainage latéral', muscles: ['Obliques'], unit: 'time', base: 20, inc: 5, perSide: true, cue: 'Sur l’avant-bras, hanches hautes, corps aligné. Chaque côté.' },
 };
 
@@ -43,7 +44,7 @@ const SESSIONS = {
   },
   upper: {
     name: 'Haut du corps & fessiers', kind: 'salle', minutes: 55,
-    A: ['tirage-vertical', 'rowing-haltere', 'developpe-epaules', 'pont-unilateral', 'triceps-poulie', 'curl-halteres', 'dead-bug'],
+    A: ['tirage-vertical', 'rowing-haltere', 'developpe-epaules', 'pont-unilateral', 'triceps-poulie', 'curl-halteres', 'crunch-poulie'],
     B: ['tirage-horizontal', 'pompes-inclinees', 'elevations-laterales', 'pull-through', 'curl-halteres', 'triceps-poulie', 'gainage-lateral'],
   },
   run: { name: 'Course lente', kind: 'course' },

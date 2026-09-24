@@ -110,6 +110,11 @@ const VIDEOS = {
   "title": "How to properly perform cable pull through",
   "author": "Mia Dales"
  },
+ "crunch-poulie": {
+  "videoId": "tQgNAIzcjlk",
+  "title": "How to do a cable crunch",
+  "author": "LeanBeefPatty"
+ },
  "gainage-lateral": {
   "videoId": "7HLVIWP0rXk",
   "title": "Side Plank",
