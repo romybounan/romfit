@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v15';
+const APP_VERSION = 'v16';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -125,7 +125,12 @@ function plannedLoad(id, week) {
 function sessionFor(d, slot = slotFor(d)) {
   if (!slot) return null;
   const week = weekNo(d);
-  if (slot.custom) return normalizeCustom(slot.custom, week, d);
+  if (slot.custom) {
+    // Pause kiné : une séance du coach qui contenait des exercices épaules/bras est remplacée par la séance jambes complète
+    const ids = slot.custom.exercise_ids || [];
+    if (inRehab(d) && ids.some((id) => ARMS_LOAD.includes(id))) return { ...sessionFor(d, { key: 'upper' }), replacedCustom: true };
+    return normalizeCustom(slot.custom, week, d);
+  }
   const def = SESSIONS[slot.key];
   if (!def) return null;
   const dk = dateKey(d);
@@ -385,7 +390,7 @@ function sessionCard(s, d) {
     <div class="stack" style="padding: 14px 16px 16px">
       <div class="row" style="gap: 8px">
         <span class="chip" style="background: ${icon[1]}; color: ${icon[2]}">${ic(icon[0], 15, icon[2])}${s.kind === 'salle' ? 'Salle' : s.kind === 'course' ? 'Course' : 'Activité douce'}</span>
-        <span class="chip grey">${s.optional ? 'Optionnelle' : s.custom ? 'Adaptée par le coach' : 'Prioritaire'}</span>
+        <span class="chip grey">${s.optional ? 'Optionnelle' : s.custom ? 'Adaptée par le coach' : s.rehab ? 'Pause kiné' : 'Prioritaire'}</span>
       </div>
       <div style="font-size: 22px; line-height: 27px; font-weight: 700">${esc(s.name)}</div>
       <div class="sub">${meta}</div>
@@ -630,6 +635,7 @@ function daySheet(dk) {
       <label class="stack" style="gap: 4px"><span class="foot">${s.kind === 'course' ? 'Distance (km)' : 'FC moyenne'}</span><input class="field" id="md-x" inputmode="decimal" placeholder="—"></label></div>
       <button class="btn t block" data-act="mark-done" data-date="${dk}">${ic('check', 16, 'var(--violet-text)', 2.6)}Marquer comme faite</button></div>` : ''}
     ${!done && d >= today ? `<button class="btn t block" data-act="move-sheet" data-date="${dk}">${ic('move', 16, 'var(--violet-text)')}Déplacer</button>` : ''}
+    ${!done && (slotFor(d)?.custom) ? `<button class="btn t block" data-act="reset-day" data-date="${dk}">${ic('refresh', 16, 'var(--violet-text)')}Revenir à la séance prévue</button>` : ''}
     ${!done ? `<button class="btn w block" data-act="remove-day" data-date="${dk}" style="color: #C62F3C; box-shadow: inset 0 0 0 1px var(--sep)">Retirer de la semaine</button>` : '<div class="chip soft" style="align-self: flex-start">Séance déjà enregistrée</div>'}`;
 }
 
@@ -1264,6 +1270,13 @@ const ACTIONS = {
     const x = $('#md-x').value;
     logManual(dk, { minutes: $('#md-min').value, ...(s.kind === 'course' ? { km: x } : { hr: x }) });
     state.sheet = null; render(); toast('Séance enregistrée ✓');
+  },
+  'reset-day': (t) => {
+    const d = parseKey(t.dataset.date);
+    const plan = weekPlan(d).slice();
+    const i = dayIdx(d);
+    plan[i] = defaultWeek()[i] || { key: 'lower' };
+    setWeekPlan(d, plan); state.sheet = null; render(); toast('Séance prévue rétablie ✓');
   },
   'remove-day': (t) => { removeDay(t.dataset.date); state.sheet = null; render(); toast('Séance retirée de la semaine'); },
   'move-sheet': (t) => { state.sheet = { type: 'move', arg: t.dataset.date }; render(); },
