@@ -54,7 +54,8 @@ const SESSIONS = {
     A: ['tirage-vertical', 'rowing-haltere', 'developpe-epaules', 'pont-unilateral', 'triceps-poulie', 'curl-halteres', 'crunch-poulie'],
     B: ['tirage-horizontal', 'pompes-inclinees', 'elevations-laterales', 'pull-through', 'curl-halteres', 'triceps-poulie', 'gainage-lateral'],
   },
-  run: { name: 'Course lente', kind: 'course' },
+  run: { name: 'Course', kind: 'course' },
+  long: { name: 'Sortie longue', kind: 'course' },
   optional: { name: 'Activité douce', kind: 'douce', minutes: 45, optional: true },
 };
 
@@ -63,6 +64,9 @@ const REHAB = { from: '2026-09-25', to: '2026-10-18', label: 'Pause épaules et 
 
 // Jours par défaut (0 = lundi) — modifiables dans les réglages
 const DEFAULT_WEEK = { 0: 'lower', 2: 'run', 4: 'upper', 5: 'optional' };
+// Objectif 10 km fin décembre : 2 courses par semaine à partir de la semaine 5 (19 octobre)
+const TWO_RUNS_FROM_WEEK = 5;
+const DEFAULT_WEEK_2 = { 0: 'lower', 2: 'run', 4: 'upper', 5: 'long', 6: 'optional' };
 
 // ── Phases jusqu'au 31 décembre
 const PHASES = [
@@ -88,14 +92,18 @@ const km = (v) => String(v).replace('.', ',');
 const RUN_TYPES = {
   lente: (d) => ({ name: 'Course lente', place: 'tapis', km: d, steps: [['Marche rapide pour t’échauffer', 5], [`${km(d)} km de course lente : tu dois pouvoir parler`, Math.round(d * 10)], ['Marche + étirements', 5]] }),
   progressive: (d) => ({ name: 'Course progressive', place: 'dehors', km: d, steps: [['Échauffement : marche rapide puis trot', 6], [`${km(Math.round(d * 0.4 * 2) / 2)} km facile`, Math.round(d * 0.4 * 10)], [`${km(Math.round(d * 0.35 * 2) / 2)} km un peu plus vite (tu peux encore dire quelques mots)`, Math.round(d * 0.35 * 9)], [`${km(Math.round(d * 0.25 * 2) / 2)} km soutenu (respiration forte mais contrôlée)`, Math.round(d * 0.25 * 8)], ['Marche + étirements', 5]] }),
+  longue: (d) => ({ name: 'Sortie longue', place: 'dehors', km: d, steps: [['Marche rapide pour t’échauffer', 5], [`${km(d)} km très lents : tu dois pouvoir parler du début à la fin`, Math.round(d * 10.2)], ['Marche + étirements', 5]] }),
   fractionne: (n) => ({ name: 'Fractionné', place: 'dehors', km: 3.5, steps: [['Échauffement : 1 km très facile', 10], [`${n} × (1 min rapide + 1 min 30 en trottinant)`, Math.round(n * 2.5)], ['1 km facile', 10], ['Marche + étirements', 5]] }),
 };
 const RUN_PLAN = {
   1: RUN_TYPES.lente(3), 2: RUN_TYPES.lente(3.5), 3: RUN_TYPES.progressive(4), 4: RUN_TYPES.fractionne(6),
-  5: RUN_TYPES.lente(4), 6: RUN_TYPES.progressive(4.5), 7: RUN_TYPES.lente(3), 8: RUN_TYPES.fractionne(8),
-  9: RUN_TYPES.lente(5), 10: RUN_TYPES.progressive(5), 11: RUN_TYPES.fractionne(8), 12: RUN_TYPES.lente(3.5),
-  13: RUN_TYPES.lente(5.5), 14: RUN_TYPES.progressive(5), 15: RUN_TYPES.lente(6),
+  // À partir de la semaine 5 : course rythmée du mercredi (la sortie longue est dans LONG_PLAN)
+  5: RUN_TYPES.progressive(4), 6: RUN_TYPES.fractionne(6), 7: RUN_TYPES.lente(3.5), 8: RUN_TYPES.progressive(4.5),
+  9: RUN_TYPES.fractionne(8), 10: RUN_TYPES.progressive(5), 11: RUN_TYPES.fractionne(8), 12: RUN_TYPES.lente(4),
+  13: RUN_TYPES.progressive(5), 14: RUN_TYPES.fractionne(8), 15: RUN_TYPES.lente(4),
 };
+// Sortie longue du samedi : +0,5 à 1 km par semaine, semaines 7 et 12 plus légères → 10 km le samedi 26 décembre (semaine 14)
+const LONG_PLAN = { 5: 5, 6: 5.5, 7: 4.5, 8: 6, 9: 7, 10: 7.5, 11: 8.5, 12: 6.5, 13: 9, 14: 10, 15: 6 };
 const RUN_TIP = {
   tapis: 'Sur tapis : mets 1 % d’inclinaison, ça reproduit l’effort dehors. Si ton cœur s’emballe, baisse la vitesse.',
   dehors: 'Dehors : choisis un parcours plutôt plat. Si ton cœur s’emballe, ralentis ou marche un peu, c’est normal.',

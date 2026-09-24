@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v16';
+const APP_VERSION = 'v17';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -105,12 +105,14 @@ const phaseFor = (w) => PHASES.find((p) => w >= p.from && w <= p.to) || PHASES[P
 const variantFor = (w) => (w % 2 ? 'A' : 'B');
 const wkKey = (d) => dateKey(weekStart(d));
 
-function defaultWeek() {
+// Semaine type : jusqu'à la semaine 4, puis 2 courses par semaine à partir de la semaine 5
+function defaultWeek(d = new Date()) {
   const arr = Array(7).fill(null);
-  Object.entries(state.settings.week).forEach(([d, key]) => { if (key) arr[+d] = { key }; });
+  const tpl = weekNo(d) >= TWO_RUNS_FROM_WEEK ? (state.settings.week2 || DEFAULT_WEEK_2) : state.settings.week;
+  Object.entries(tpl).forEach(([i, key]) => { if (key) arr[+i] = { key }; });
   return arr;
 }
-const weekPlan = (d) => state.plan[wkKey(d)] || defaultWeek();
+const weekPlan = (d) => state.plan[wkKey(d)] || defaultWeek(d);
 const slotFor = (d) => weekPlan(d)[dayIdx(d)];
 function setWeekPlan(d, arr) { state.plan[wkKey(d)] = arr; save('plan'); }
 
@@ -146,7 +148,7 @@ function sessionFor(d, slot = slotFor(d)) {
     return { ...base, variant, minutes: def.minutes, exercises: def[variant].map((id) => ({ id, sets: setsFor(week, EXERCISES[id]), load: plannedLoad(id, week) })) };
   }
   if (def.kind === 'course') {
-    const r = RUN_PLAN[week];
+    const r = slot.key === 'long' ? RUN_TYPES.longue(LONG_PLAN[week] || 5) : RUN_PLAN[week];
     const place = state.runPlace[dk] || r.place;
     const steps = r.steps.map(([label, min]) => ({ label, min }));
     return { ...base, name: r.name, km: r.km, place, minutes: steps.reduce((n, x) => n + x.min, 0), steps, tip: RUN_TIP[place] };
@@ -358,7 +360,7 @@ function whySession(s) {
     if (has('Dos') || has('Épaules') || has('Biceps') || has('Triceps')) out.push('Haut du corps : dos et bras toniques, une posture plus droite, et l’équilibre avec le travail des jambes.');
     if (s.rehab) out.push('Rien pour les épaules et les bras : ils récupèrent pendant ta kiné.');
   } else if (s.kind === 'course') {
-    const t = { 'Course lente': 'Endurance de base : ton cœur apprend à travailler sans s’emballer, et tes jambes s’habituent à l’impact en douceur.', 'Course progressive': 'Apprendre à accélérer en fin de sortie : plus de cardio et d’aisance, sans te mettre dans le rouge dès le début.', 'Fractionné': 'Des pointes de vitesse courtes : ton cardio progresse vite et tes jambes deviennent plus toniques.' };
+    const t = { 'Sortie longue': 'C’est elle qui te mène aux 10 km : semaine après semaine, ton endurance et la résistance de tes jambes augmentent.', 'Course lente': 'Endurance de base : ton cœur apprend à travailler sans s’emballer, et tes jambes s’habituent à l’impact en douceur.', 'Course progressive': 'Apprendre à accélérer en fin de sortie : plus de cardio et d’aisance, sans te mettre dans le rouge dès le début.', 'Fractionné': 'Des pointes de vitesse courtes : ton cardio progresse vite et tes jambes deviennent plus toniques.' };
     out.push(t[s.name] || 'Cardio et endurance : ta forme générale progresse séance après séance.');
     out.push('La course fait aussi travailler fessiers, mollets et cuisses à chaque foulée, en complément de la muscu.');
     if (s.km) out.push(`Objectif du jour : ${fmtNum(s.km)} km, pour progresser un peu chaque semaine.`);
@@ -719,8 +721,8 @@ function viewProgramme() {
   <p class="foot" style="margin: 8px 4px 0">Estimation : les charges s'ajustent à chaque séance selon ce que tu réussis.</p>
   <section class="card stack" style="margin-top: 12px; gap: 6px">
     <div class="hdr" style="color: var(--run)">${ic('run', 16, 'var(--run)')}Course lente</div>
-    <div><span class="big">3</span><span class="unit"> km → </span><span class="big" style="color: var(--run)">6</span><span class="unit"> km mi-décembre</span></div>
-    <div class="foot">Une sortie par semaine, en alternant course lente, course progressive et fractionné. Tu choisis à chaque fois : tapis ou dehors.</div>
+    <div><span class="big">3</span><span class="unit"> km → </span><span class="big" style="color: var(--run)">10</span><span class="unit"> km fin décembre</span></div>
+    <div class="foot">1 course par semaine jusqu'au 18 octobre, puis 2 : une course rythmée le mercredi (progressive ou fractionné) et une sortie longue et lente le samedi, qui augmente d'environ 0,5 km par semaine. Tapis ou dehors, au choix.</div>
   </section>
   <section class="card stack" style="margin-top: 12px">
     <div class="hdr" style="color: var(--violet-text)">${ic('sparkle', 16, 'var(--violet-text)')}Comment tes charges progressent</div>
@@ -1064,7 +1066,11 @@ function weightSheet() {
 // ─────────────────────────── Réglages
 function viewSettings() {
   const st = state.settings;
-  const opts = [['', 'Repos'], ['lower', SESSIONS.lower.name], ['upper', SESSIONS.upper.name], ['run', SESSIONS.run.name], ['optional', 'Activité douce (optionnelle)']];
+  const opts = [['', 'Repos'], ['lower', SESSIONS.lower.name], ['upper', SESSIONS.upper.name], ['run', 'Course'], ['long', 'Sortie longue'], ['optional', 'Activité douce (optionnelle)']];
+  const weekList = (field, tpl) => `<div class="list">${DAYS.map((dn, i) => `<label class="li"><span class="grow" style="font-size: 16px">${dn}</span>
+    <select data-act="weekday" data-field="${field}" data-d="${i}" style="border: 0; background: transparent; color: var(--violet-text); font-weight: 600; text-align: right; max-width: 60%">
+      ${opts.map(([v, l]) => `<option value="${v}" ${(tpl[i] || '') === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}
+    </select></label>`).join('')}</div>`;
   return `
   <button class="link" data-act="tab" data-v="today" style="margin: -6px -6px 0">${ic('chevL', 22, 'var(--violet-text)', 2.4)}Aujourd'hui</button>
   <h1 class="lt" style="margin-top: 8px">Réglages</h1>
@@ -1106,10 +1112,10 @@ function viewSettings() {
   </section>
 
   <h2 class="sec">Ma semaine type</h2>
-  <div class="list">${DAYS.map((dn, i) => `<label class="li"><span class="grow" style="font-size: 16px">${dn}</span>
-    <select data-act="weekday" data-d="${i}" style="border: 0; background: transparent; color: var(--violet-text); font-weight: 600; text-align: right; max-width: 60%">
-      ${opts.map(([v, l]) => `<option value="${v}" ${(st.week[i] || '') === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}
-    </select></label>`).join('')}</div>
+  <div class="foot" style="margin: -4px 4px 8px">Jusqu'au ${fmtShort(addDays(START, (TWO_RUNS_FROM_WEEK - 1) * 7 - 1))}</div>
+  ${weekList('week', st.week)}
+  <div class="foot" style="margin: 16px 4px 8px">À partir du ${fmtShort(addDays(START, (TWO_RUNS_FROM_WEEK - 1) * 7))} (2 courses par semaine, objectif 10 km)</div>
+  ${weekList('week2', st.week2 || DEFAULT_WEEK_2)}
   <label class="list" style="display: block; margin-top: 12px"><div class="li"><span class="grow" style="font-size: 16px">Heure habituelle</span>
     <input type="time" data-act="default-hour" value="${esc(st.hour)}" style="border: 0; background: transparent; color: var(--violet-text); font-weight: 600"></div></label>
 
@@ -1275,7 +1281,7 @@ const ACTIONS = {
     const d = parseKey(t.dataset.date);
     const plan = weekPlan(d).slice();
     const i = dayIdx(d);
-    plan[i] = defaultWeek()[i] || { key: 'lower' };
+    plan[i] = defaultWeek(d)[i] || { key: 'lower' };
     setWeekPlan(d, plan); state.sheet = null; render(); toast('Séance prévue rétablie ✓');
   },
   'remove-day': (t) => { removeDay(t.dataset.date); state.sheet = null; render(); toast('Séance retirée de la semaine'); },
@@ -1415,9 +1421,10 @@ document.addEventListener('change', (e) => {
   if (t.dataset.act === 'hour') { state.hours[t.dataset.date] = t.value; save('hours'); render(); }
   if (t.dataset.act === 'default-hour') { state.settings.hour = t.value; save('settings'); }
   if (t.dataset.act === 'weekday') {
-    const w = { ...state.settings.week };
+    const f = t.dataset.field || 'week';
+    const w = { ...(state.settings[f] || (f === 'week2' ? DEFAULT_WEEK_2 : DEFAULT_WEEK)) };
     if (t.value) w[t.dataset.d] = t.value; else delete w[t.dataset.d];
-    state.settings.week = w; save('settings'); toast('Semaine type mise à jour');
+    state.settings[f] = w; save('settings'); toast('Semaine type mise à jour');
   }
   if (t.dataset.act === 'chart-ex') { state.chartEx = t.value; render(); }
   if (t.dataset.act === 'import' && t.files[0]) {

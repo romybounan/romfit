@@ -142,7 +142,7 @@ function coachContext() {
       zone_poids_kg: state.settings.zone,
       pause_kine: typeof REHAB !== 'undefined' ? `${REHAB.label} du ${REHAB.from} au ${REHAB.to} : aucun exercice pour les épaules et les bras, rien à porter à bout de bras, pas de gainage sur les bras. 2 séances jambes/fessiers par semaine, 1 course (3 km minimum, sur tapis ou dehors), 1 séance optionnelle (vélo, marche inclinée ou reformer).` : null,
     },
-    programme: { semaine: week, sur: 15, phase: phaseFor(week).name, fin: PROGRAM_END, seances_types: Object.fromEntries(Object.entries(SESSIONS).map(([k, s]) => [k, s.name])) },
+    programme: { semaine: week, sur: 15, phase: phaseFor(week).name, fin: PROGRAM_END, objectif_course: 'Courir 10 km fin décembre (ou plus). 1 course/semaine jusqu’au 18 octobre, puis 2 : course rythmée le mercredi + sortie longue lente le samedi (+0,5 km/semaine environ, 10 km semaine du 21 décembre). Minimum 3 km par course. Tapis ou dehors au choix.', seances_types: Object.fromEntries(Object.entries(SESSIONS).map(([k, s]) => [k, s.name])) },
     exercices_disponibles: Object.fromEntries(Object.entries(EXERCISES).map(([id, e]) => [id, e.name])),
     charges_actuelles_kg: Object.fromEntries(Object.keys(EXERCISES).filter((id) => !EXERCISES[id].bodyweight).map((id) => [id, state.loads[id] ?? EXERCISES[id].base])),
     planning_2_semaines: days,
