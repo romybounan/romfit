@@ -1020,7 +1020,7 @@ function feedbackSheet() {
 // Accepte du JSON ou un texte « clé : valeur » par ligne (format du raccourci RomFit Santé)
 function parseHealthText(text) {
   const out = {};
-  const num = (v) => { const m = String(v).replace(/\s/g, '').match(/-?\d+(?:[.,]\d+)?/); return m ? parseFloat(m[0].replace(',', '.')) : null; };
+  const num = (v) => { const m = String(v).replace(/\s/g, '').replace(/(\d)\.(?=\d{3}(\D|$))/g, '$1').match(/-?\d+(?:[.,]\d+)?/); return m ? parseFloat(m[0].replace(',', '.')) : null; };
   String(text).split(/\n|;/).forEach((line) => {
     const i = line.indexOf(':');
     if (i < 0) return;
