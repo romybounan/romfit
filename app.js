@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v9';
+const APP_VERSION = 'v10';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -1164,7 +1164,11 @@ function render() {
 
 // ─────────────────────────── Actions
 const ACTIONS = {
-  tab: (t) => { state.confirmAbandon = false; state.view = t.dataset.v; state.weekOffset = state.view === 'planning' ? state.weekOffset : 0; render(); scrollTo(0, 0); },
+  tab: (t) => {
+    state.confirmAbandon = false; state.view = t.dataset.v; state.weekOffset = state.view === 'planning' ? state.weekOffset : 0; render();
+    // Le coach s'ouvre sur les derniers messages, les autres écrans en haut
+    if (state.view === 'coach') requestAnimationFrame(() => scrollTo(0, document.body.scrollHeight)); else scrollTo(0, 0);
+  },
   week: (t) => { state.weekOffset = +t.dataset.v; render(); },
   meals: () => { state.mealsOpen = !state.mealsOpen; render(); },
   start: (t) => {
