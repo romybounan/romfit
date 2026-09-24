@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v10';
+const APP_VERSION = 'v11';
 
 // ─────────────────────────── Stockage
 const store = {

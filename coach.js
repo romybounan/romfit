@@ -19,32 +19,55 @@ async function pickModel() {
   return state.settings.model;
 }
 
-async function gemini(contents, { system, schema } = {}) {
+async function gemini(contents, { system, schema, retried, loose } = {}) {
   if (!state.settings.apiKey) throw new Error('nokey');
   const model = await pickModel();
   const body = { contents, generationConfig: { temperature: 0.6 } };
   if (system) body.systemInstruction = { parts: [{ text: system }] };
   if (schema) { body.generationConfig.responseMimeType = 'application/json'; body.generationConfig.responseSchema = schema; }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 45000);
   const r = await fetch(`${GEMINI}/models/${model}:generateContent`, {
+    signal: ctrl.signal,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': state.settings.apiKey },
     body: JSON.stringify(body),
   });
-  const data = await r.json();
+  clearTimeout(timer);
+  const data = await r.json().catch(() => ({}));
   if (!r.ok) {
     if (r.status === 404 && model !== FALLBACK_MODEL) { state.settings.model = FALLBACK_MODEL; save('settings'); return gemini(contents, { system, schema }); }
     const msg = data?.error?.message || `Erreur ${r.status}`;
-    throw new Error(r.status === 429 ? 'quota' : msg);
+    // Schéma refusé par ce modèle : on redemande sans schéma strict (JSON décrit dans la consigne)
+    if (r.status === 400 && schema && !retried && /schema|response_schema|responseSchema/i.test(msg)) {
+      return gemini(contents, { system: `${system || ''}\nRéponds uniquement avec un objet JSON respectant ce schéma : ${JSON.stringify(schema)}`, retried: true, loose: true });
+    }
+    throw new Error(r.status === 429 ? 'quota' : `${r.status} · ${msg}`);
   }
-  const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
-  return schema ? JSON.parse(text) : text;
+  const cand = data.candidates?.[0];
+  const text = (cand?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('').trim();
+  if (!text) throw new Error(`réponse vide (${cand?.finishReason || data.promptFeedback?.blockReason || 'inconnu'})`);
+  if (!schema && !loose) return text;
+  return parseJsonLoose(text);
+}
+
+// Lit du JSON même entouré de ```json … ``` ou de texte
+function parseJsonLoose(text) {
+  const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+  try { return JSON.parse(clean); } catch {}
+  const a = clean.indexOf('{'), b = clean.lastIndexOf('}');
+  if (a >= 0 && b > a) { try { return JSON.parse(clean.slice(a, b + 1)); } catch {} }
+  // Dernier recours : afficher le texte tel quel comme réponse
+  return { reply: clean, actions: [] };
 }
 
 function errText(e) {
   if (e.message === 'nokey') return 'Ajoute ta clé Gemini dans les réglages pour parler au coach.';
   if (e.message === 'quota') return 'Limite gratuite atteinte pour le moment. Réessaie dans une minute.';
   if (/API key/i.test(e.message)) return 'Ta clé Gemini semble invalide. Vérifie-la dans les réglages.';
-  return 'Le coach n’a pas pu répondre (réseau ?). Réessaie.';
+  if (e.name === 'AbortError') return 'Le coach met trop de temps à répondre. Réessaie dans un instant.';
+  if (/Failed to fetch|NetworkError|Load failed/i.test(e.message)) return 'Pas de connexion internet. Réessaie quand tu as du réseau.';
+  return `Le coach n’a pas pu répondre. Détail : ${String(e.message).slice(0, 160)}`;
 }
 
 // Réduit une photo avant envoi (plus rapide, moins de données)
@@ -177,6 +200,7 @@ async function sendChat(text, image) {
     const ctx = `Contexte (données de l'app, JSON) :\n${JSON.stringify(coachContext())}`;
     history[history.length - 1].parts.unshift({ text: ctx });
     const res = await gemini(history, { system: SYSTEM, schema: CHAT_SCHEMA });
+    if (typeof res.reply !== 'string' || !res.reply) throw new Error('réponse sans texte');
     const actions = (res.actions || []).filter((a) => a && a.type && a.date);
     state.chat.push({ role: 'model', text: res.reply, actions: actions.length ? actions : null, at: Date.now() });
   } catch (e) {
