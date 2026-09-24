@@ -19,30 +19,57 @@ async function pickModel() {
   return state.settings.model;
 }
 
-async function gemini(contents, { system, schema, retried, loose } = {}) {
+// Appel à Gemini avec relance automatique : si un modèle est surchargé (503) ou à sa limite (429),
+// on réessaie puis on passe au modèle gratuit suivant.
+const BACKUP_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function gemini(contents, opts = {}) {
   if (!state.settings.apiKey) throw new Error('nokey');
-  const model = await pickModel();
+  const first = await pickModel();
+  const models = [...new Set([first, ...BACKUP_MODELS])];
+  let lastErr;
+  for (const model of models) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await geminiOnce(model, contents, opts);
+      } catch (e) {
+        lastErr = e;
+        if (e.status === 404) break;                       // modèle indisponible : suivant
+        if (e.status === 503 || e.status === 500) { await sleep(attempt ? 3000 : 1200); continue; } // surcharge : on réessaie
+        if (e.status === 429) break;                       // limite de ce modèle : suivant
+        throw e;                                           // autre erreur : on arrête
+      }
+    }
+  }
+  throw lastErr?.status === 429 ? new Error('quota') : lastErr?.status === 503 ? new Error('busy') : lastErr;
+}
+
+async function geminiOnce(model, contents, { system, schema, loose } = {}) {
   const body = { contents, generationConfig: { temperature: 0.6 } };
   if (system) body.systemInstruction = { parts: [{ text: system }] };
   if (schema) { body.generationConfig.responseMimeType = 'application/json'; body.generationConfig.responseSchema = schema; }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 45000);
-  const r = await fetch(`${GEMINI}/models/${model}:generateContent`, {
-    signal: ctrl.signal,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': state.settings.apiKey },
-    body: JSON.stringify(body),
-  });
-  clearTimeout(timer);
+  let r;
+  try {
+    r = await fetch(`${GEMINI}/models/${model}:generateContent`, {
+      signal: ctrl.signal,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': state.settings.apiKey },
+      body: JSON.stringify(body),
+    });
+  } finally { clearTimeout(timer); }
   const data = await r.json().catch(() => ({}));
   if (!r.ok) {
-    if (r.status === 404 && model !== FALLBACK_MODEL) { state.settings.model = FALLBACK_MODEL; save('settings'); return gemini(contents, { system, schema }); }
     const msg = data?.error?.message || `Erreur ${r.status}`;
     // Schéma refusé par ce modèle : on redemande sans schéma strict (JSON décrit dans la consigne)
-    if (r.status === 400 && schema && !retried && /schema|response_schema|responseSchema/i.test(msg)) {
-      return gemini(contents, { system: `${system || ''}\nRéponds uniquement avec un objet JSON respectant ce schéma : ${JSON.stringify(schema)}`, retried: true, loose: true });
+    if (r.status === 400 && schema && /schema|response_schema|responseSchema/i.test(msg)) {
+      return geminiOnce(model, contents, { system: `${system || ''}\nRéponds uniquement avec un objet JSON respectant ce schéma : ${JSON.stringify(schema)}`, loose: true });
     }
-    throw new Error(r.status === 429 ? 'quota' : `${r.status} · ${msg}`);
+    const err = new Error(`${r.status} · ${msg}`);
+    err.status = r.status;
+    throw err;
   }
   const cand = data.candidates?.[0];
   const text = (cand?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('').trim();
@@ -63,7 +90,8 @@ function parseJsonLoose(text) {
 
 function errText(e) {
   if (e.message === 'nokey') return 'Ajoute ta clé Gemini dans les réglages pour parler au coach.';
-  if (e.message === 'quota') return 'Limite gratuite atteinte pour le moment. Réessaie dans une minute.';
+  if (e.message === 'quota') return 'Limite gratuite de Gemini atteinte pour le moment. Réessaie dans quelques minutes.';
+  if (e.message === 'busy') return 'Les serveurs de Gemini sont surchargés en ce moment (côté Google). Réessaie dans quelques minutes.';
   if (/API key/i.test(e.message)) return 'Ta clé Gemini semble invalide. Vérifie-la dans les réglages.';
   if (e.name === 'AbortError') return 'Le coach met trop de temps à répondre. Réessaie dans un instant.';
   if (/Failed to fetch|NetworkError|Load failed/i.test(e.message)) return 'Pas de connexion internet. Réessaie quand tu as du réseau.';
