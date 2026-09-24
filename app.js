@@ -319,6 +319,7 @@ function sessionCard(s, d) {
       </div>
       <div style="font-size: 22px; line-height: 27px; font-weight: 700">${esc(s.name)}</div>
       <div class="sub">${meta}</div>
+      <button class="link" data-act="preview" data-date="${dateKey(d)}" style="font-size: 15px; font-weight: 600; align-self: flex-start">${s.exercises ? 'Voir les exercices' : 'Voir le déroulé'} ${ic('chevR', 14, 'var(--violet-text)', 2.4)}</button>
       <label class="row" style="background: var(--fill); border-radius: 12px; padding: 10px 12px; gap: 10px; font-size: 15px">
         ${ic('clock', 18, 'var(--violet-text)')}<span class="grow">Prévue à</span>
         <input type="time" value="${esc(hour)}" data-act="hour" data-date="${dateKey(d)}" aria-label="Heure prévue" style="border: 0; background: transparent; font-weight: 600; color: var(--violet-text); font-size: 15px; text-align: right">
@@ -507,6 +508,36 @@ function removeDay(dk) {
   setWeekPlan(d, plan);
 }
 
+// Liste détaillée des exercices (ou des étapes) d'une séance, pour la voir à l'avance
+function sessionPreview(s) {
+  if (s.exercises) {
+    return `<div class="stack" style="gap: 8px">
+      <div class="foot" style="font-weight: 600">${s.exercises.length} exercices · échauffement 5 min avant de commencer</div>
+      ${s.exercises.map((e, i) => {
+        const ex = EXERCISES[e.id];
+        const t = thumb(e.id);
+        const target = ex.unit === 'time' ? `${e.load} s` : `${ex.reps[0]}-${ex.reps[1]} reps${ex.perSide ? ' / côté' : ''}`;
+        const load = e.load != null && ex.unit !== 'time' ? ` · ${fmtNum(e.load)} kg${ex.perHand ? ' par haltère' : ''}` : ex.bodyweight ? ' · poids du corps' : '';
+        return `<div class="row" style="gap: 12px; align-items: flex-start; background: var(--fill); border-radius: 12px; padding: 10px">
+          ${t ? `<button data-act="video" data-id="${VIDEOS[e.id].videoId}" aria-label="Voir la démo de ${esc(ex.name)}" style="position: relative; flex: none"><img src="${t}" alt="" style="width: 72px; height: 54px; border-radius: 8px; object-fit: cover"><span style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center">${ic('play', 18, '#fff')}</span></button>` : ''}
+          <div class="grow stack" style="gap: 3px">
+            <div style="font-size: 15px; font-weight: 700">${i + 1}. ${esc(ex.name)}</div>
+            <div class="foot" style="color: var(--violet-text); font-weight: 600">${e.sets} × ${target}${load}</div>
+            <div class="foot">${esc(ex.cue)}</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+  if (s.steps) {
+    return `<div class="list" style="padding: 0 12px; background: var(--fill)">${s.steps.map((st) => `<div class="li" style="align-items: flex-start">
+      ${st.min ? `<b style="color: var(--run); width: 52px; flex: none">${st.min} min</b>` : ''}
+      <div class="grow"><div style="font-size: 15px">${esc(st.label)}</div>${st.text ? `<div class="foot">${esc(st.text)}</div>` : ''}</div></div>`).join('')}</div>
+      ${s.tip ? `<div class="foot">${esc(s.tip)}</div>` : ''}`;
+  }
+  return '';
+}
+
 function daySheet(dk) {
   const d = parseKey(dk);
   const s = sessionFor(d);
@@ -518,6 +549,7 @@ function daySheet(dk) {
       <div><div style="font-size: 20px; font-weight: 700">${esc(s.name)}</div><div class="sub">${DAYS[dayIdx(d)]} ${d.getDate()} · ${s.minutes} min</div></div></div>
       <button class="x" data-act="close-sheet" aria-label="Fermer">${ic('close', 14, 'var(--sec)', 2.4)}</button>
     </div>
+    ${sessionPreview(s)}
     ${dk === dateKey() ? `<button class="btn p block" data-act="start" data-date="${dk}">${ic('play', 16, '#fff')}Commencer la séance</button>` : ''}
     ${!done && d <= today ? `<div class="stack" style="gap: 8px"><div class="foot" style="font-weight: 600">Tu l'as faite sans l'app ?</div>
       <div class="grid2"><label class="stack" style="gap: 4px"><span class="foot">Durée (min)</span><input class="field" id="md-min" inputmode="numeric" placeholder="${s.minutes}"></label>
