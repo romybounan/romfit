@@ -1,6 +1,6 @@
 // Cache hors ligne : l'app fonctionne même sans réseau (à la salle, par exemple).
 // Change VERSION à chaque mise à jour pour que les téléphones récupèrent la nouvelle version.
-const VERSION = 'romfit-v8';
+const VERSION = 'romfit-v9';
 const FILES = ['./', 'index.html', 'app.js', 'data.js', 'videos.js', 'coach.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
@@ -19,7 +19,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || !e.request.url.startsWith(self.location.origin)) return;
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-cache' })
       .then((res) => {
         const copy = res.clone();
         caches.open(VERSION).then((c) => c.put(e.request, copy));

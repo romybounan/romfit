@@ -1,5 +1,7 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
+const APP_VERSION = 'v9';
+
 // ─────────────────────────── Stockage
 const store = {
   get(key, fallback) {
@@ -88,6 +90,7 @@ const IC = {
   map: '<path d="M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6zM9 4v14M15 6v14"/>',
   pencil: '<path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+  refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>',
   copy: '<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
 };
 const ic = (n, size = 20, color = 'currentColor', sw = 2) =>
@@ -284,6 +287,7 @@ function viewToday() {
   <div class="row" style="justify-content: space-between; align-items: flex-end">
     <div><div class="cap">${fmtDay(now)}</div><h1 class="lt">Aujourd'hui</h1></div>
     <div class="row" style="gap: 8px; margin-bottom: 4px">
+      <button class="x" style="width: 36px; height: 36px; border-radius: 18px; background: #fff" data-act="reload" aria-label="Recharger l'app">${ic('refresh', 17, 'var(--violet-text)')}</button>
       <button class="x" style="width: 36px; height: 36px; border-radius: 18px; background: #fff" data-act="feedback" aria-label="Noter un retour sur l'app">${ic('pencil', 17, 'var(--violet-text)')}</button>
       <button data-act="tab" data-v="settings" aria-label="Réglages" style="width: 36px; height: 36px; border-radius: 18px; background: var(--violet); color: #fff; font-size: 15px; font-weight: 700">${esc((state.settings.name || '?')[0].toUpperCase())}</button>
     </div>
@@ -1154,7 +1158,8 @@ function render() {
   const sheet = state.sheet ? `<div class="scrim" data-act="close-sheet"></div><div class="sheet" role="dialog"><div class="handle"></div>${SHEETS[state.sheet.type](state.sheet.arg)}</div>` : '';
   const video = state.video ? `<div class="video" role="dialog"><button class="x" data-act="close-video" aria-label="Fermer la vidéo">${ic('close', 16, '#fff', 2.4)}</button>
     <iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(state.video)}?autoplay=1&playsinline=1&rel=0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen title="Démonstration"></iframe></div>` : '';
-  $('#app').innerHTML = `<main>${fn()}</main>${withTabs ? tabbar() : ''}${state.view === 'workout' ? restBar() : ''}${sheet}${video}`;
+  const upd = state.updateReady ? `<button class="note" data-act="reload" style="width: 100%; margin-bottom: 12px; align-items: center; text-align: left">${ic('refresh', 18, 'var(--violet-text)')}<span class="grow">Une nouvelle version de RomFit est prête.</span><b style="color: var(--violet-text)">Mettre à jour</b></button>` : '';
+  $('#app').innerHTML = `<main>${upd}${fn()}</main>${withTabs ? tabbar() : ''}${state.view === 'workout' ? restBar() : ''}${sheet}${video}`;
 }
 
 // ─────────────────────────── Actions
@@ -1232,7 +1237,7 @@ const ACTIONS = {
     state.active = null; state.rest = null; state.confirmAbandon = false; state.view = 'today';
     save('active'); render(); scrollTo(0, 0); toast('Séance abandonnée');
   },
-  reload: () => location.reload(),
+  reload: () => hardReload(),
   feedback: () => { state.sheet = { type: 'feedback' }; render(); },
   'save-feedback': () => { const v = $('#fbtext').value.trim(); if (v) { state.feedback.push({ text: v, at: new Date().toISOString() }); save('feedback'); toast('Retour noté ✓'); } state.sheet = null; render(); },
   'del-feedback': (t) => { state.feedback.splice(+t.dataset.i, 1); save('feedback'); render(); },
@@ -1376,6 +1381,20 @@ document.addEventListener('touchend', () => {
   if (go) { if (ind) ind.classList.add('spin'); setTimeout(() => location.reload(), 250); } else if (ind) ind.remove();
 });
 
+// ─────────────────────────── Mises à jour
+async function hardReload() {
+  try { const r = await navigator.serviceWorker?.getRegistration(); await r?.update(); } catch {}
+  location.reload();
+}
+async function checkUpdate() {
+  try {
+    const r = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
+    const { v } = await r.json();
+    if (v && v !== APP_VERSION && !state.updateReady) { state.updateReady = true; render(); }
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
+
 // ─────────────────────────── Démarrage
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.healthPending) render(); });
 if (!state.settings.since) { state.settings.since = dateKey(); store.set('settings', state.settings); }
@@ -1383,3 +1402,4 @@ checkHash();
 if (state.active) state.view = 'workout';
 render();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+checkUpdate();
