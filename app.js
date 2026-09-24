@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v17';
+const APP_VERSION = 'v18';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -602,6 +602,7 @@ function sessionPreview(s) {
           <div class="grow stack" style="gap: 3px">
             <div style="font-size: 15px; font-weight: 700">${i + 1}. ${esc(ex.name)}</div>
             <div class="foot" style="color: var(--violet-text); font-weight: 600">${e.sets} × ${target}${load}</div>
+            ${ex.benefit ? `<div class="row" style="gap: 6px; align-items: flex-start; font-size: 13px; line-height: 18px; color: var(--label)">${ic('sparkle', 14, 'var(--violet-text)')}<span>${esc(ex.benefit)}</span></div>` : ''}
             <div class="foot">${esc(ex.cue)}</div>
           </div>
         </div>`;
@@ -822,6 +823,7 @@ function viewWorkout() {
         ${ex.muscles.map((m, i) => `<span class="chip ${i ? 'grey' : 'soft'}">${esc(m)}</span>`).join('')}
         <span class="chip grey">${e.sets} × ${target} · repos ${rest} s</span>
       </div>
+      ${ex.benefit ? `<div class="note">${ic('sparkle', 16, 'var(--violet-text)')}<span><b>Pourquoi cet exo :</b> ${esc(ex.benefit)}</span></div>` : ''}
       <div class="sub" style="color: var(--label)">${esc(ex.cue)}</div>
       ${s.rehab && e.id === 'hip-thrust' ? `<div class="note">${ic('sparkle', 16, 'var(--violet-text)')}<span>Pause kiné : si tenir la barre gêne ton épaule, utilise la machine à hip thrust ou fais un pont fessier au sol avec un disque posé sur les hanches.</span></div>` : ''}
       ${s.week <= 2 && !ex.bodyweight ? `<div class="note">${ic('sparkle', 16, 'var(--violet-text)')}<span>Reprise : choisis une charge qui te laisse 2 à 3 répétitions en réserve. Ajuste le poids prévu si besoin, l'app s'adapte.</span></div>` : ''}
