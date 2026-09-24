@@ -902,6 +902,8 @@ function viewSettings() {
   <h2 class="sec">Mon profil</h2>
   <section class="card stack">
     <div class="sub" style="color: var(--label)">Enregistré uniquement sur ce téléphone. Le coach s'en sert pour adapter ses conseils.</div>
+    <label class="stack" style="gap: 6px"><span class="foot">Tu as un lien de profil ? Colle-le ici</span>
+      <div class="row" style="gap: 8px"><input class="field" id="pf-link" placeholder="https://…#profil=…" autocomplete="off"><button class="btn t sm" data-act="import-profile">Importer</button></div></label>
     <label class="stack" style="gap: 6px"><span class="foot">Prénom</span><input class="field" id="pf-name" value="${esc(st.name)}"></label>
     <div class="grid2">
       <label class="stack" style="gap: 6px"><span class="foot">Âge</span><input class="field" id="pf-age" inputmode="numeric" value="${esc(st.profile?.age ?? '')}"></label>
@@ -1054,6 +1056,12 @@ const ACTIONS = {
   'copy-feedback': async () => {
     const txt = 'Mes retours sur RomFit :\n' + state.feedback.map((f) => `- ${f.text}`).join('\n');
     try { await navigator.clipboard.writeText(txt); toast('Copié ✓ Colle-le dans Claude.'); } catch { prompt('Copie ce texte :', txt); }
+  },
+  'import-profile': () => {
+    const v = $('#pf-link').value.trim();
+    if (!/profil=/.test(v)) { toast('Colle le lien complet (il contient « #profil= »).'); return; }
+    location.hash = v.slice(v.indexOf('profil='));
+    checkHash(); render();
   },
   'save-profile': () => {
     const st = state.settings;
