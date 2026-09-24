@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v13';
+const APP_VERSION = 'v14';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -672,10 +672,16 @@ function startSession(dk) {
   render(); scrollTo(0, 0);
 }
 
+// Séance en cours : on garde la liste d'exercices du moment où elle a été démarrée
 function activeSession() {
   const a = state.active;
   const d = parseKey(a.date);
-  return a.custom ? normalizeCustom(a.custom, a.week) : sessionFor(d, { key: a.key });
+  const s = a.custom ? normalizeCustom(a.custom, a.week) : sessionFor(d, { key: a.key });
+  if (s && a.kind === 'salle' && a.exercises.length) {
+    s.exercises = a.exercises.filter((e) => EXERCISES[e.id]).map((e) => ({ id: e.id, sets: e.sets.length, load: plannedLoad(e.id, a.week) }));
+    state.active.exercises = a.exercises.filter((e) => EXERCISES[e.id]);
+  }
+  return s;
 }
 
 function viewWorkout() {
@@ -1043,7 +1049,8 @@ function viewSettings() {
     <button class="link danger" data-act="reset" style="font-size: 15px">Tout effacer</button>
   </section>
   <button class="btn t block" data-act="reload" style="margin-top: 20px">Recharger l'app</button>
-  <p class="foot center" style="margin-top: 20px">Programme construit à partir des recommandations ACSM et ISSN. Il ne remplace pas l'avis d'un coach diplômé ou d'une diététicienne. En cas de douleur, arrête l'exercice.</p>`;
+  <p class="foot center" style="margin-top: 20px">RomFit ${APP_VERSION}</p>
+  <p class="foot center" style="margin-top: 4px">Programme construit à partir des recommandations ACSM et ISSN. Il ne remplace pas l'avis d'un coach diplômé ou d'une diététicienne. En cas de douleur, arrête l'exercice.</p>`;
 }
 
 function feedbackSheet() {
