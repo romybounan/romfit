@@ -36,6 +36,7 @@ const EXERCISES = {
   'hyperextension':      { name: 'Extension au banc à 45°', muscles: ['Fessiers', 'Ischios'], unit: 'reps', reps: [12, 15], base: 0, inc: 0, bodyweight: true, cue: 'Bras croisés sur la poitrine, dos légèrement arrondi, remonte en serrant fort les fessiers. Plus tard, tu pourras tenir un disque contre la poitrine.', benefit: 'Fessiers et bas du dos : dessine le bas des fesses et renforce la chaîne arrière, sans rien porter.' },
   'releve-jambes':       { name: 'Relevés de jambes allongée', muscles: ['Abdos'], unit: 'reps', reps: [10, 15], base: 0, inc: 0, bodyweight: true, cue: 'Allongée, bras le long du corps, bas du dos plaqué au sol. Monte les jambes tendues (ou genoux pliés pour commencer), redescends lentement sans toucher le sol.', benefit: 'Bas des abdos : un ventre plus ferme et un bassin mieux tenu en course, sans solliciter les épaules.' },
   'fentes-bulgares-pdc': { name: 'Fentes bulgares (poids du corps)', muscles: ['Fessiers', 'Cuisses'], unit: 'reps', reps: [10, 12], base: 0, inc: 0, bodyweight: true, perSide: true, cue: 'Pied arrière sur le banc, mains sur les hanches, buste légèrement penché en avant pour cibler les fessiers. Chaque jambe.', benefit: "Fessiers et cuisses, une jambe à la fois, sans rien porter : corrige les déséquilibres et imite l'appui de la course." },
+  'mollets-assis':       { name: 'Mollets assis', muscles: ['Mollets'], unit: 'reps', reps: [12, 15], base: 20, inc: 5, cue: 'À la machine : avant des pieds sur la plateforme, genoux sous les coussins. Descends les talons au maximum, puis monte le plus haut possible et marque une pause. Sans machine : assise sur un banc, haltères simplement posés sur les genoux.', benefit: 'Mollets (soléaire) : ce sont eux qui encaissent chaque impact en course. Les renforcer aide à prévenir les douleurs aux tibias et au tendon d’Achille.' },
   'gainage-lateral':     { name: 'Gainage latéral', muscles: ['Obliques'], unit: 'time', base: 20, inc: 5, perSide: true, cue: 'Sur l’avant-bras, hanches hautes, corps aligné. Chaque côté.', benefit: 'Obliques et moyen fessier : une taille gainée et des hanches stables en course.' },
 };
 
@@ -47,7 +48,7 @@ const SESSIONS = {
     B: ['hip-thrust', 'presse-cuisses', 'leg-curl', 'step-up', 'kickback-poulie', 'rowing-haltere'],
     // Pause kiné (épaules et bras au repos) : machines et poids du corps, rien à porter
     R1: ['hip-thrust', 'presse-cuisses', 'leg-curl', 'abduction-machine', 'pont-unilateral', 'releve-jambes'],
-    R2: ['hip-thrust', 'leg-extension', 'hyperextension', 'fentes-bulgares-pdc', 'kickback-poulie', 'releve-jambes'],
+    R2: ['hip-thrust', 'leg-extension', 'mollets-assis', 'fentes-bulgares-pdc', 'kickback-poulie', 'releve-jambes'],
   },
   upper: {
     name: 'Haut du corps & fessiers', kind: 'salle', minutes: 55,

@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v18';
+const APP_VERSION = 'v19';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -356,6 +356,7 @@ function whySession(s) {
     if (has('Fessiers')) out.push(`Fessiers : ${has('Fessiers')} séries dédiées, dont le hip thrust, l’exercice le plus efficace pour des fessiers plus fermes et plus ronds.`);
     if (has('Moyen fessier')) out.push('Haut et côté des fesses (moyen fessier) : donne du galbe et stabilise ton bassin et tes genoux à chaque foulée.');
     if (has('Cuisses') || has('Ischios')) out.push('Cuisses et ischios : des jambes plus solides, qui encaissent mieux l’impact de la course et protègent tes genoux.');
+    if (has('Mollets')) out.push('Mollets : ils amortissent chaque foulée, les renforcer protège tes tibias et ton tendon d’Achille quand tu augmentes les kilomètres.');
     if (has('Abdos') || has('Obliques')) out.push('Abdos : un tronc gainé pour une meilleure posture en courant et moins de fatigue dans le dos.');
     if (has('Dos') || has('Épaules') || has('Biceps') || has('Triceps')) out.push('Haut du corps : dos et bras toniques, une posture plus droite, et l’équilibre avec le travail des jambes.');
     if (s.rehab) out.push('Rien pour les épaules et les bras : ils récupèrent pendant ta kiné.');

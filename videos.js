@@ -1,5 +1,6 @@
 // Vidéos de démonstration par des coachs femmes (YouTube) — chaque identifiant vérifié via oEmbed.
 const VIDEOS = {
+ "mollets-assis": {"videoId": "iNfR5cnabZo", "title": "How to Do a Seated Calf Raise | Female Bodybuilding", "author": "Howcast"},
  "leg-extension": {"videoId": "3pOsjZGe10k", "title": "HOW TO USE THE LEG EXTENSION MACHINE | COACH KELLY CUES", "author": "Kelly Matthews"},
  "hyperextension": {"videoId": "BboDheDDH5Y", "title": "Back hyperextensions", "author": "Erin Stern"},
  "releve-jambes": {"videoId": "Wp4BlxcFTkE", "title": "Lying Leg Raises", "author": "LivestrongWoman"},
