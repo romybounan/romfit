@@ -246,7 +246,7 @@ function viewToday() {
       <button class="btn w" data-act="abandon" style="color: #C62F3C; box-shadow: inset 0 0 0 1px var(--sep)">${state.confirmAbandon ? 'Confirmer' : 'Abandonner'}</button></div>
       ${state.confirmAbandon ? '<div class="foot">La séance en cours sera supprimée sans rien enregistrer.</div>' : ''}
     </section>`;
-  } else if (s && done) {
+  } else if (done) {
     const log = logsOn(now).slice(-1)[0];
     main = kudosCard(log, stats);
   } else if (s) {
@@ -342,7 +342,7 @@ function kudosCard(log, stats) {
   const badges = [perfect ? `<span class="chip" style="background: #fff; color: var(--violet-text)">${ic('flame', 14, 'var(--violet-text)')}Semaine parfaite</span>` : '']
     .concat((log.ups || []).slice(0, 2).map((u) => `<span class="chip" style="background: #fff; color: var(--violet-text)">${ic('arrowUp', 14, 'var(--violet-text)', 2.4)}${esc(u)}</span>`)).join('');
   const tiles = [[log.durationMin, 'minutes'], sets ? [sets, 'séries'] : log.km ? [fmtNum(log.km), 'km'] : null, log.watch?.kcal ? [log.watch.kcal, 'kcal'] : null].filter(Boolean);
-  return `<section class="kudos" style="margin-top: 18px">
+  return `<section class="kudos" style="margin-top: 18px" data-act="log-detail" data-id="${log.id}">
     ${conf}
     <div style="position: relative; width: 64px; height: 64px; border-radius: 32px; background: rgba(255,255,255,.18); display: flex; align-items: center; justify-content: center; margin-top: 12px">${ic('trophy', 32, '#fff')}</div>
     <div style="position: relative; font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #E4DBFF; margin-top: 6px">Séance validée</div>
@@ -352,6 +352,7 @@ function kudosCard(log, stats) {
     <div style="position: relative; display: grid; grid-template-columns: repeat(${tiles.length}, minmax(0, 1fr)); gap: 8px; width: 100%; margin-top: 12px">
       ${tiles.map(([v, l]) => `<div style="background: rgba(255,255,255,.14); border-radius: 12px; padding: 10px 4px"><div style="font-size: 22px; font-weight: 800">${v}</div><div style="font-size: 12px; color: #E4DBFF">${l}</div></div>`).join('')}
     </div>
+    <div style="position: relative; display: flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 600; margin-top: 6px">Voir le détail ${ic('chevR', 16, '#fff', 2.4)}</div>
   </section>`;
 }
 
@@ -430,7 +431,7 @@ function viewPlanning() {
     return `<div class="dayrow" data-day="${i}" ${s && !done ? 'data-drop="1"' : 'data-drop="1"'}>
       <div class="d"><div class="foot" style="font-weight: 600">${dn}</div><div style="font-size: 20px; font-weight: 700">${d.getDate()}</div></div>
       <div class="ico" style="background: ${icon[1]}">${ic(icon[0], 17, icon[2])}</div>
-      <button class="grow" style="text-align: left; min-width: 0" ${s ? `data-act="preview" data-date="${dateKey(d)}"` : ''}>
+      <button class="grow" style="text-align: left; min-width: 0" ${done ? `data-act="log-detail" data-id="${logsOn(d).slice(-1)[0].id}"` : s ? `data-act="preview" data-date="${dateKey(d)}"` : ''}>
         <div style="font-size: 16px; font-weight: 600; color: ${s || extra ? 'var(--label)' : '#8E8A9C'}">${s ? esc(s.name) : extra ? esc(extra.name) : 'Repos'}</div>
         ${extra ? `<div class="foot">${extra.durationMin} min${extra.km ? ` · ${fmtNum(extra.km)} km` : ''}</div>` : ''}
         ${s ? `<div class="foot">${s.kind === 'salle' ? 'Salle' : s.kind === 'course' ? 'Zone 2' : 'Vélo, marche ou reformer'} · ${s.minutes} min</div>` : ''}
@@ -928,8 +929,8 @@ function viewProgress() {
   <section class="card stack" style="margin-top: 12px">
     <div class="hdr">Historique</div>
     ${state.logs.length ? `<div class="list" style="padding: 0">${[...state.logs].reverse().slice(0, 20).map((l) => `<div class="li">
-      <div class="grow"><div style="font-size: 16px; font-weight: 600">${esc(l.name)}</div><div class="foot">${fmtShort(parseKey(l.dateKey))} · ${l.durationMin} min${l.km ? ` · ${fmtNum(l.km)} km` : ''}${l.feeling ? ` · ${esc(l.feeling)}` : ''}</div></div>
-      <button class="link" data-act="edit-log" data-id="${l.id}" style="font-size: 14px">Modifier</button></div>`).join('')}</div>` : '<div class="sub">Aucune séance pour l’instant.</div>'}
+      <div class="grow" data-act="log-detail" data-id="${l.id}" style="cursor: pointer"><div style="font-size: 16px; font-weight: 600">${esc(l.name)}</div><div class="foot">${fmtShort(parseKey(l.dateKey))} · ${l.durationMin} min${l.km ? ` · ${fmtNum(l.km)} km` : ''}${l.feeling ? ` · ${esc(l.feeling)}` : ''}</div></div>
+      <button class="link" data-act="log-detail" data-id="${l.id}" style="font-size: 14px">Détails ${ic('chevR', 14, 'var(--violet-text)', 2.4)}</button></div>`).join('')}</div>` : '<div class="sub">Aucune séance pour l’instant.</div>'}
   </section>`;
 }
 
@@ -1071,6 +1072,36 @@ function importHealth(text) {
 
 // ─────────────────────────── Rendu
 const VIEWS = { today: viewToday, planning: viewPlanning, programme: viewProgramme, workout: viewWorkout, finish: viewFinish, progress: viewProgress, settings: viewSettings };
+function logDetail(id) {
+  const l = state.logs.find((x) => x.id === id);
+  if (!l) return '';
+  const icon = kindIcon[l.kind] || kindIcon.douce;
+  const pace = l.km && l.durationMin ? l.durationMin / l.km : null;
+  const tiles = [
+    [l.durationMin, 'min', 'Durée'],
+    l.km ? [fmtNum(l.km), 'km', 'Distance'] : null,
+    pace ? [`${Math.floor(pace)}:${pad(Math.round((pace % 1) * 60))}`, '/km', 'Allure'] : null,
+    l.watch?.hr ? [Math.round(l.watch.hr), 'BPM', 'FC moyenne'] : null,
+    l.watch?.kcal ? [Math.round(l.watch.kcal), 'kcal', 'Calories actives'] : null,
+  ].filter(Boolean);
+  const ex = (l.exercises || []).filter((e) => e.sets.some((x) => x.done));
+  return `<div class="row" style="justify-content: space-between; align-items: flex-start">
+      <div class="row" style="gap: 10px"><div class="ico" style="background: ${icon[1]}">${ic(icon[0], 17, icon[2])}</div>
+      <div><div style="font-size: 20px; font-weight: 700">${esc(l.name)}</div><div class="sub">${fmtDay(parseKey(l.dateKey))}</div></div></div>
+      <button class="x" data-act="close-sheet" aria-label="Fermer">${ic('close', 14, 'var(--sec)', 2.4)}</button>
+    </div>
+    <div class="grid2" style="gap: 10px">${tiles.map(([v, u, lab]) => `<div style="background: var(--fill); border-radius: 12px; padding: 12px">
+      <div class="foot">${lab}</div><div><span class="big" style="font-size: 24px">${v}</span><span class="unit"> ${u}</span></div></div>`).join('')}</div>
+    ${l.feeling ? `<div class="row" style="gap: 8px"><span class="foot">Ressenti</span><span class="chip soft">${esc(l.feeling)}</span></div>` : ''}
+    ${ex.length ? `<div class="list" style="padding: 0 4px">${ex.map((e) => {
+      const d = EXERCISES[e.id];
+      return `<div class="li" style="align-items: flex-start"><div class="grow"><div style="font-size: 15px; font-weight: 600">${esc(d?.name || e.id)}</div>
+        <div class="foot">${e.sets.filter((x) => x.done).map((x) => d?.unit === 'time' ? `${x.reps} s` : x.kg ? `${x.kg} kg × ${x.reps}` : `${x.reps} reps`).join(' · ')}</div></div></div>`;
+    }).join('')}</div>` : ''}
+    ${(l.ups || []).length ? `<div class="note">${ic('arrowUp', 16, 'var(--violet-text)', 2.4)}<span>Prochaine fois : ${esc(l.ups.join(', '))}</span></div>` : ''}
+    <button class="btn t block" data-act="edit-log" data-id="${l.id}">${ic('pencil', 16, 'var(--violet-text)')}Modifier</button>`;
+}
+
 function logSheet(id) {
   const l = state.logs.find((x) => x.id === id);
   if (!l) return '';
@@ -1082,7 +1113,7 @@ function logSheet(id) {
     <button class="link danger" data-act="del-log" data-id="${l.id}" style="font-size: 15px; align-self: center">${state.confirmDel === l.id ? 'Confirmer la suppression' : 'Supprimer cette séance'}</button>`;
 }
 
-const SHEETS = { log: (a) => logSheet(a), move: (a) => moveSheet(a), day: (a) => daySheet(a), weight: weightSheet, feedback: feedbackSheet };
+const SHEETS = { detail: (a) => logDetail(a), log: (a) => logSheet(a), move: (a) => moveSheet(a), day: (a) => daySheet(a), weight: weightSheet, feedback: feedbackSheet };
 
 function render() {
   if (['workout', 'finish'].includes(state.view) && !state.active) state.view = 'today';
@@ -1150,6 +1181,7 @@ const ACTIONS = {
     if (state.settings.zone && v < state.settings.zone[0]) toast('Tu es sous ta zone : ajoute une collation par jour et parles-en au coach.');
     else if (n >= 3 && w[n - 1].kg < w[n - 2].kg && w[n - 2].kg < w[n - 3].kg) toast('Ton poids baisse 2 semaines de suite : ajoute une collation par jour.');
   },
+  'log-detail': (t) => { state.sheet = { type: 'detail', arg: t.dataset.id }; render(); },
   'edit-log': (t) => { state.confirmDel = null; state.sheet = { type: 'log', arg: t.dataset.id }; render(); },
   'save-log': (t) => {
     const l = state.logs.find((x) => x.id === t.dataset.id);
