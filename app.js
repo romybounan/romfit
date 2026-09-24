@@ -242,7 +242,9 @@ function viewToday() {
     main = `<section class="card stack" style="margin-top: 18px">
       <div class="hdr" style="color: var(--violet-text)">${ic('play', 14, 'var(--violet-text)')}Séance en cours</div>
       <div style="font-size: 22px; font-weight: 700">${esc(state.active.name)}</div>
-      <button class="btn p" data-act="resume">Reprendre</button>
+      <div class="grid2" style="gap: 10px"><button class="btn p" data-act="resume">Reprendre</button>
+      <button class="btn w" data-act="abandon" style="color: #C62F3C; box-shadow: inset 0 0 0 1px var(--sep)">${state.confirmAbandon ? 'Confirmer' : 'Abandonner'}</button></div>
+      ${state.confirmAbandon ? '<div class="foot">La séance en cours sera supprimée sans rien enregistrer.</div>' : ''}
     </section>`;
   } else if (s && done) {
     const log = logsOn(now).slice(-1)[0];
@@ -720,7 +722,8 @@ function viewWorkout() {
     ${thumb(nextEx.id) ? `<img src="${thumb(nextEx.id)}" alt="" style="width: 56px; height: 42px; border-radius: 8px; object-fit: cover">` : `<div class="ico" style="width: 56px; height: 42px; background: var(--violet-soft)">${ic('dumbbell', 18, 'var(--violet-text)')}</div>`}
     <div class="grow"><div class="foot">Ensuite</div><div style="font-size: 16px; font-weight: 600">${esc(EXERCISES[nextEx.id].name)}</div></div>
     ${ic('chevR', 18, 'var(--ter)')}
-  </button>` : `<button class="btn p block" data-act="finish" style="margin-top: 12px">Terminer la séance</button>`}`;
+  </button>` : `<button class="btn p block" data-act="finish" style="margin-top: 12px">Terminer la séance</button>`}
+  <button class="link danger" data-act="abandon" style="margin: 18px auto 0; display: flex; font-size: 15px">${state.confirmAbandon ? 'Confirmer : supprimer cette séance sans l’enregistrer' : 'Abandonner la séance'}</button>`;
 }
 
 // Minuteur de repos
@@ -926,7 +929,7 @@ function viewProgress() {
     <div class="hdr">Historique</div>
     ${state.logs.length ? `<div class="list" style="padding: 0">${[...state.logs].reverse().slice(0, 20).map((l) => `<div class="li">
       <div class="grow"><div style="font-size: 16px; font-weight: 600">${esc(l.name)}</div><div class="foot">${fmtShort(parseKey(l.dateKey))} · ${l.durationMin} min${l.km ? ` · ${fmtNum(l.km)} km` : ''}${l.feeling ? ` · ${esc(l.feeling)}` : ''}</div></div>
-      <button class="link danger" data-act="del-log" data-id="${l.id}" style="font-size: 14px">Supprimer</button></div>`).join('')}</div>` : '<div class="sub">Aucune séance pour l’instant.</div>'}
+      <button class="link" data-act="edit-log" data-id="${l.id}" style="font-size: 14px">Modifier</button></div>`).join('')}</div>` : '<div class="sub">Aucune séance pour l’instant.</div>'}
   </section>`;
 }
 
@@ -1002,6 +1005,7 @@ function viewSettings() {
     <div class="grid2"><button class="btn t sm" data-act="export">Exporter</button><label class="btn t sm">Importer<input type="file" accept="application/json" data-act="import" hidden></label></div>
     <button class="link danger" data-act="reset" style="font-size: 15px">Tout effacer</button>
   </section>
+  <button class="btn t block" data-act="reload" style="margin-top: 20px">Recharger l'app</button>
   <p class="foot center" style="margin-top: 20px">Programme construit à partir des recommandations ACSM et ISSN. Il ne remplace pas l'avis d'un coach diplômé ou d'une diététicienne. En cas de douleur, arrête l'exercice.</p>`;
 }
 
@@ -1067,7 +1071,18 @@ function importHealth(text) {
 
 // ─────────────────────────── Rendu
 const VIEWS = { today: viewToday, planning: viewPlanning, programme: viewProgramme, workout: viewWorkout, finish: viewFinish, progress: viewProgress, settings: viewSettings };
-const SHEETS = { move: (a) => moveSheet(a), day: (a) => daySheet(a), weight: weightSheet, feedback: feedbackSheet };
+function logSheet(id) {
+  const l = state.logs.find((x) => x.id === id);
+  if (!l) return '';
+  const f = (k, label, v, mode = 'decimal') => `<label class="stack" style="gap: 4px"><span class="foot">${label}</span><input class="field" id="lg-${k}" inputmode="${mode}" value="${v != null ? esc(fmtNum(v)) : ''}" placeholder="—"></label>`;
+  return `<div class="row" style="justify-content: space-between"><div><div style="font-size: 20px; font-weight: 700">${esc(l.name)}</div><div class="sub">${fmtDay(parseKey(l.dateKey))}</div></div>
+      <button class="x" data-act="close-sheet" aria-label="Fermer">${ic('close', 14, 'var(--sec)', 2.4)}</button></div>
+    <div class="grid2">${f('min', 'Durée (min)', l.durationMin, 'numeric')}${f('km', 'Distance (km)', l.km)}${f('hr', 'FC moyenne', l.watch?.hr, 'numeric')}${f('kcal', 'Calories actives', l.watch?.kcal, 'numeric')}</div>
+    <button class="btn p block" data-act="save-log" data-id="${l.id}">Enregistrer</button>
+    <button class="link danger" data-act="del-log" data-id="${l.id}" style="font-size: 15px; align-self: center">${state.confirmDel === l.id ? 'Confirmer la suppression' : 'Supprimer cette séance'}</button>`;
+}
+
+const SHEETS = { log: (a) => logSheet(a), move: (a) => moveSheet(a), day: (a) => daySheet(a), weight: weightSheet, feedback: feedbackSheet };
 
 function render() {
   if (['workout', 'finish'].includes(state.view) && !state.active) state.view = 'today';
@@ -1081,7 +1096,7 @@ function render() {
 
 // ─────────────────────────── Actions
 const ACTIONS = {
-  tab: (t) => { state.view = t.dataset.v; state.weekOffset = state.view === 'planning' ? state.weekOffset : 0; render(); scrollTo(0, 0); },
+  tab: (t) => { state.confirmAbandon = false; state.view = t.dataset.v; state.weekOffset = state.view === 'planning' ? state.weekOffset : 0; render(); scrollTo(0, 0); },
   week: (t) => { state.weekOffset = +t.dataset.v; render(); },
   meals: () => { state.mealsOpen = !state.mealsOpen; render(); },
   start: (t) => {
@@ -1135,7 +1150,25 @@ const ACTIONS = {
     if (state.settings.zone && v < state.settings.zone[0]) toast('Tu es sous ta zone : ajoute une collation par jour et parles-en au coach.');
     else if (n >= 3 && w[n - 1].kg < w[n - 2].kg && w[n - 2].kg < w[n - 3].kg) toast('Ton poids baisse 2 semaines de suite : ajoute une collation par jour.');
   },
-  'del-log': (t) => { if (confirm('Supprimer cette séance de l’historique ?')) { state.logs = state.logs.filter((l) => l.id !== t.dataset.id); save('logs'); render(); } },
+  'edit-log': (t) => { state.confirmDel = null; state.sheet = { type: 'log', arg: t.dataset.id }; render(); },
+  'save-log': (t) => {
+    const l = state.logs.find((x) => x.id === t.dataset.id);
+    const v = (k) => parseNum($('#lg-' + k).value);
+    l.durationMin = v('min') || l.durationMin; l.km = v('km');
+    l.watch = { ...(l.watch || {}), hr: v('hr'), kcal: v('kcal') };
+    save('logs'); state.sheet = null; render(); toast('Séance modifiée ✓');
+  },
+  'del-log': (t) => {
+    if (state.confirmDel !== t.dataset.id) { state.confirmDel = t.dataset.id; render(); return; }
+    state.logs = state.logs.filter((l) => l.id !== t.dataset.id); state.confirmDel = null; state.sheet = null;
+    save('logs'); render(); toast('Séance supprimée');
+  },
+  abandon: () => {
+    if (!state.confirmAbandon) { state.confirmAbandon = true; render(); return; }
+    state.active = null; state.rest = null; state.confirmAbandon = false; state.view = 'today';
+    save('active'); render(); scrollTo(0, 0); toast('Séance abandonnée');
+  },
+  reload: () => location.reload(),
   feedback: () => { state.sheet = { type: 'feedback' }; render(); },
   'save-feedback': () => { const v = $('#fbtext').value.trim(); if (v) { state.feedback.push({ text: v, at: new Date().toISOString() }); save('feedback'); toast('Retour noté ✓'); } state.sheet = null; render(); },
   'del-feedback': (t) => { state.feedback.splice(+t.dataset.i, 1); save('feedback'); render(); },
@@ -1253,6 +1286,31 @@ function checkHash() {
   const m = location.hash.match(/sante=([^&]+)/);
   if (m) { importHealth(decodeURIComponent(m[1])); history.replaceState(null, '', location.pathname); }
 }
+
+// Tirer vers le bas pour recharger (l'app installée n'a pas de bouton de rechargement)
+let pull = null;
+document.addEventListener('touchstart', (e) => {
+  if (scrollY <= 0 && !state.sheet && !state.video && !drag && !e.target.closest('input, textarea, select, [data-grip]')) pull = { y: e.touches[0].clientY, d: 0 };
+}, { passive: true });
+document.addEventListener('touchmove', (e) => {
+  if (!pull) return;
+  pull.d = e.touches[0].clientY - pull.y;
+  let ind = $('#pull');
+  if (pull.d > 10 && !ind) { ind = document.createElement('div'); ind.id = 'pull'; ind.className = 'pull'; document.body.appendChild(ind); }
+  if (ind) {
+    const k = Math.min(1, pull.d / 90);
+    ind.style.transform = `translate(-50%, ${Math.min(70, pull.d * 0.5)}px) rotate(${k * 270}deg)`;
+    ind.style.opacity = k;
+    ind.classList.toggle('ready', pull.d > 90);
+  }
+}, { passive: true });
+document.addEventListener('touchend', () => {
+  if (!pull) return;
+  const go = pull.d > 90;
+  pull = null;
+  const ind = $('#pull');
+  if (go) { if (ind) ind.classList.add('spin'); setTimeout(() => location.reload(), 250); } else if (ind) ind.remove();
+});
 
 // ─────────────────────────── Démarrage
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.healthPending) render(); });
