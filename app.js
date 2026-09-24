@@ -278,6 +278,7 @@ function viewToday() {
   }
 
   return `
+  ${state.healthPending && Date.now() - state.healthPending < 10 * 60000 ? `<section class="note" style="margin-bottom: 12px; align-items: center">${ic('watch', 18, 'var(--violet-text)')}<span class="grow">Le raccourci a copié tes données Santé.</span><button class="btn p sm" data-act="health-paste" style="height: 34px">Importer</button></section>` : ''}
   <div class="row" style="justify-content: space-between; align-items: flex-end">
     <div><div class="cap">${fmtDay(now)}</div><h1 class="lt">Aujourd'hui</h1></div>
     <div class="row" style="gap: 8px; margin-bottom: 4px">
@@ -420,14 +421,16 @@ function viewPlanning() {
     else if (s && past && !s.optional && dateKey(d) >= state.settings.since) right = `<button class="chip warn" data-act="move-sheet" data-date="${dateKey(d)}">${ic('move', 14, 'var(--warn)')}Déplacer</button>`;
     else if (s && isToday) right = `<span class="chip solid">Aujourd'hui</span>`;
     else if (s && s.optional) right = `<span class="chip dashed">Optionnelle</span>`;
-    else if (!s && done) right = `<span class="chip soft">${ic('check', 14, 'var(--violet-text)', 2.6)}Bonus</span>`;
-    const icon = s ? (kindIcon[s.kind] || kindIcon.douce) : ['moon', '#F1EEF7', '#8E8A9C'];
+    else if (!s && done) right = `<span class="chip soft">${ic('check', 14, 'var(--violet-text)', 2.6)}Fait</span>`;
+    const extra = !s && done ? logsOn(d).slice(-1)[0] : null;
+    const icon = s ? (kindIcon[s.kind] || kindIcon.douce) : extra ? (kindIcon[extra.kind] || kindIcon.douce) : ['moon', '#F1EEF7', '#8E8A9C'];
     const canDrag = s && !done && !past;
     return `<div class="dayrow" data-day="${i}" ${s && !done ? 'data-drop="1"' : 'data-drop="1"'}>
       <div class="d"><div class="foot" style="font-weight: 600">${dn}</div><div style="font-size: 20px; font-weight: 700">${d.getDate()}</div></div>
       <div class="ico" style="background: ${icon[1]}">${ic(icon[0], 17, icon[2])}</div>
       <button class="grow" style="text-align: left; min-width: 0" ${s ? `data-act="preview" data-date="${dateKey(d)}"` : ''}>
-        <div style="font-size: 16px; font-weight: 600; color: ${s ? 'var(--label)' : '#8E8A9C'}">${s ? esc(s.name) : 'Repos'}</div>
+        <div style="font-size: 16px; font-weight: 600; color: ${s || extra ? 'var(--label)' : '#8E8A9C'}">${s ? esc(s.name) : extra ? esc(extra.name) : 'Repos'}</div>
+        ${extra ? `<div class="foot">${extra.durationMin} min${extra.km ? ` · ${fmtNum(extra.km)} km` : ''}</div>` : ''}
         ${s ? `<div class="foot">${s.kind === 'salle' ? 'Salle' : s.kind === 'course' ? 'Zone 2' : 'Vélo, marche ou reformer'} · ${s.minutes} min</div>` : ''}
       </button>
       ${right}
@@ -476,6 +479,49 @@ function moveSheet(fromKey) {
     <div class="foot" style="font-weight: 600">Choisis un nouveau jour</div>
     <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">${opts}</div>
     <div class="note">${ic('sparkle', 18, 'var(--violet-text)')}<span>Évite deux séances de jambes le même jour ou deux jours d'affilée. Si le jour choisi a déjà une séance, les deux s'échangent.</span></div>`;
+}
+
+// Enregistre une séance faite sans passer par l'écran de séance (coach ou menu du planning)
+function logManual(dk, o = {}) {
+  const planned = sessionFor(parseKey(dk));
+  const kind = o.kind || planned?.kind || 'course';
+  const log = {
+    id: uid(), dateKey: dk, savedAt: new Date().toISOString(), key: planned?.key || 'manual',
+    name: o.name || planned?.name || 'Séance', kind, week: weekNo(parseKey(dk)), optional: !!planned?.optional && !o.name,
+    durationMin: Math.round(parseNum(o.minutes) || planned?.minutes || 30), feeling: o.feeling || null,
+    watch: { kcal: parseNum(o.kcal), hr: parseNum(o.hr) }, km: parseNum(o.km), manual: true,
+  };
+  state.logs.push(log);
+  state.logs.sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+  save('logs');
+  return log;
+}
+
+function removeDay(dk) {
+  const d = parseKey(dk);
+  const plan = weekPlan(d).slice();
+  plan[dayIdx(d)] = null;
+  setWeekPlan(d, plan);
+}
+
+function daySheet(dk) {
+  const d = parseKey(dk);
+  const s = sessionFor(d);
+  const done = doneOn(d);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const icon = kindIcon[s.kind] || kindIcon.douce;
+  return `<div class="row" style="justify-content: space-between; align-items: flex-start">
+      <div class="row" style="gap: 10px"><div class="ico" style="background: ${icon[1]}">${ic(icon[0], 17, icon[2])}</div>
+      <div><div style="font-size: 20px; font-weight: 700">${esc(s.name)}</div><div class="sub">${DAYS[dayIdx(d)]} ${d.getDate()} · ${s.minutes} min</div></div></div>
+      <button class="x" data-act="close-sheet" aria-label="Fermer">${ic('close', 14, 'var(--sec)', 2.4)}</button>
+    </div>
+    ${dk === dateKey() ? `<button class="btn p block" data-act="start" data-date="${dk}">${ic('play', 16, '#fff')}Commencer la séance</button>` : ''}
+    ${!done && d <= today ? `<div class="stack" style="gap: 8px"><div class="foot" style="font-weight: 600">Tu l'as faite sans l'app ?</div>
+      <div class="grid2"><label class="stack" style="gap: 4px"><span class="foot">Durée (min)</span><input class="field" id="md-min" inputmode="numeric" placeholder="${s.minutes}"></label>
+      <label class="stack" style="gap: 4px"><span class="foot">${s.kind === 'course' ? 'Distance (km)' : 'FC moyenne'}</span><input class="field" id="md-x" inputmode="decimal" placeholder="—"></label></div>
+      <button class="btn t block" data-act="mark-done" data-date="${dk}">${ic('check', 16, 'var(--violet-text)', 2.6)}Marquer comme faite</button></div>` : ''}
+    ${!done && d >= today ? `<button class="btn t block" data-act="move-sheet" data-date="${dk}">${ic('move', 16, 'var(--violet-text)')}Déplacer</button>` : ''}
+    ${!done ? `<button class="btn w block" data-act="remove-day" data-date="${dk}" style="color: #C62F3C; box-shadow: inset 0 0 0 1px var(--sep)">Retirer de la semaine</button>` : '<div class="chip soft" style="align-self: flex-start">Séance déjà enregistrée</div>'}`;
 }
 
 function moveSession(dayFrom, dayTo, ref) {
@@ -931,6 +977,8 @@ function viewSettings() {
   <section class="card stack">
     <div class="sub" style="color: var(--label)">Le raccourci « RomFit Santé » copie tes données (sommeil, FC au repos…). Reviens ensuite ici et appuie sur « Coller ».</div>
     <div class="grid2"><button class="btn t sm" data-act="health-run">Lancer le raccourci</button><button class="btn t sm" data-act="health-paste">Coller les données</button></div>
+    <textarea class="field" id="health-text" placeholder="Ou colle ici le texte copié par le raccourci" style="min-height: 70px"></textarea>
+    <button class="btn w sm" data-act="health-manual" style="box-shadow: inset 0 0 0 1px var(--sep)">Importer ce texte</button>
   </section>
 
   <h2 class="sec">Ma semaine type</h2>
@@ -964,9 +1012,39 @@ function feedbackSheet() {
 }
 
 // ─────────────────────────── Santé (raccourci Apple)
+// Accepte du JSON ou un texte « clé : valeur » par ligne (format du raccourci RomFit Santé)
+function parseHealthText(text) {
+  const out = {};
+  const num = (v) => { const m = String(v).replace(/\s/g, '').match(/-?\d+(?:[.,]\d+)?/); return m ? parseFloat(m[0].replace(',', '.')) : null; };
+  String(text).split(/\n|;/).forEach((line) => {
+    const i = line.indexOf(':');
+    if (i < 0) return;
+    const key = line.slice(0, i).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    const raw = line.slice(i + 1).trim();
+    if (!raw) return;
+    if (/sommeil|sleep/.test(key)) {
+      const h = raw.match(/(\d+(?:[.,]\d+)?)\s*h/i), mn = raw.match(/(\d+)\s*min/i);
+      let v;
+      if (h || mn) v = (h ? parseFloat(h[1].replace(',', '.')) * 60 : 0) + (mn ? +mn[1] : 0);
+      else {
+        v = num(raw);
+        if (v == null) return;
+        if (/_h\b|heure/.test(key) || v <= 24) v *= 60; else if (/_s\b|seconde/.test(key) || v > 1440) v /= 60;
+      }
+      out.sommeil_min = Math.round(v);
+    } else if (/repos|resting/.test(key)) out.fc_repos = num(raw);
+    else if (/pas|steps/.test(key)) out.pas = num(raw);
+    else if (/kcal|energie|calorie/.test(key)) out.kcal_actives = num(raw);
+    else if (/poids|weight/.test(key)) out.poids = num(raw);
+    else if (/date/.test(key)) out.date = raw.slice(0, 10);
+  });
+  return out;
+}
+
 function importHealth(text) {
   let data;
-  try { data = JSON.parse(String(text).trim()); } catch { toast('Données Santé illisibles. Relance le raccourci.'); return false; }
+  try { data = JSON.parse(String(text).trim()); } catch { data = parseHealthText(text); }
+  if (!data || (!Array.isArray(data) && !Object.keys(data).length)) { toast('Aucune donnée Santé reconnue. Relance le raccourci.'); return false; }
   const list = Array.isArray(data) ? data : [data];
   let n = 0;
   list.forEach((d) => {
@@ -989,7 +1067,7 @@ function importHealth(text) {
 
 // ─────────────────────────── Rendu
 const VIEWS = { today: viewToday, planning: viewPlanning, programme: viewProgramme, workout: viewWorkout, finish: viewFinish, progress: viewProgress, settings: viewSettings };
-const SHEETS = { move: (a) => moveSheet(a), weight: weightSheet, feedback: feedbackSheet };
+const SHEETS = { move: (a) => moveSheet(a), day: (a) => daySheet(a), weight: weightSheet, feedback: feedbackSheet };
 
 function render() {
   if (['workout', 'finish'].includes(state.view) && !state.active) state.view = 'today';
@@ -1007,11 +1085,19 @@ const ACTIONS = {
   week: (t) => { state.weekOffset = +t.dataset.v; render(); },
   meals: () => { state.mealsOpen = !state.mealsOpen; render(); },
   start: (t) => {
-    if (state.active && !confirm('Une séance est déjà en cours. La remplacer ?')) return;
+    state.sheet = null;
     startSession(t.dataset.date);
   },
   resume: () => { state.view = 'workout'; render(); scrollTo(0, 0); },
-  preview: (t) => { if (t.dataset.date === dateKey()) { state.view = 'today'; render(); scrollTo(0, 0); } else toast('Cette séance sera disponible le jour prévu.'); },
+  preview: (t) => { state.sheet = { type: 'day', arg: t.dataset.date }; render(); },
+  'mark-done': (t) => {
+    const dk = t.dataset.date;
+    const s = sessionFor(parseKey(dk));
+    const x = $('#md-x').value;
+    logManual(dk, { minutes: $('#md-min').value, ...(s.kind === 'course' ? { km: x } : { hr: x }) });
+    state.sheet = null; render(); toast('Séance enregistrée ✓');
+  },
+  'remove-day': (t) => { removeDay(t.dataset.date); state.sheet = null; render(); toast('Séance retirée de la semaine'); },
   'move-sheet': (t) => { state.sheet = { type: 'move', arg: t.dataset.date }; render(); },
   'move-to': (t) => { moveSession(dayIdx(parseKey(t.dataset.from)), +t.dataset.to, parseKey(t.dataset.from)); state.sheet = null; toast(`Séance déplacée à ${DAYS[+t.dataset.to].toLowerCase()}`); render(); },
   'reset-week': () => { delete state.plan[wkKey(addDays(weekStart(), state.weekOffset * 7))]; save('plan'); render(); },
@@ -1073,10 +1159,12 @@ const ACTIONS = {
     save('settings'); toast('Profil enregistré ✓'); render();
   },
   'save-key': () => { state.settings.apiKey = $('#apikey').value.trim(); state.settings.model = ''; save('settings'); toast('Clé enregistrée ✓'); render(); },
-  'health-sync': () => { state.view = 'settings'; render(); scrollTo(0, 0); },
-  'health-run': () => { location.href = 'shortcuts://run-shortcut?name=' + encodeURIComponent('RomFit Santé'); },
+  'health-sync': () => { state.healthPending = Date.now(); location.href = 'shortcuts://run-shortcut?name=' + encodeURIComponent('RomFit Santé'); },
+  'health-run': () => { state.healthPending = Date.now(); location.href = 'shortcuts://run-shortcut?name=' + encodeURIComponent('RomFit Santé'); },
+  'health-manual': () => { const v = $('#health-text').value; if (v.trim() && importHealth(v)) { state.view = 'today'; render(); scrollTo(0, 0); } },
   'health-paste': async () => {
-    try { const txt = await navigator.clipboard.readText(); if (importHealth(txt)) { state.view = 'today'; render(); } } catch { toast('Autorise le collage, puis réessaie.'); }
+    state.healthPending = null;
+    try { const txt = await navigator.clipboard.readText(); if (importHealth(txt)) { state.view = 'today'; render(); } } catch { toast('Collage refusé : colle le texte dans le champ des réglages.'); }
   },
   export: () => {
     const data = {}; KEYS.forEach((k) => { data[k] = state[k]; }); data.settings = { ...state.settings, apiKey: '' };
@@ -1167,6 +1255,7 @@ function checkHash() {
 }
 
 // ─────────────────────────── Démarrage
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.healthPending) render(); });
 if (!state.settings.since) { state.settings.since = dateKey(); store.set('settings', state.settings); }
 checkHash();
 if (state.active) state.view = 'workout';

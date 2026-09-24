@@ -105,9 +105,13 @@ Règles :
 - Réponds dans la langue de son message (français ou espagnol), tutoiement, ton chaleureux, direct et motivant, réponses courtes (4 à 6 phrases max) adaptées à un écran de téléphone. Pas de markdown, pas de titres, pas d'astérisques.
 - Respecte ses objectifs de poids : si elle ne veut pas maigrir (ou si son poids passe sous sa zone), ne propose jamais de régime hypocalorique ni de perte de poids.
 - Course : allure lente (zone 2, elle doit pouvoir parler), alternance marche/course si besoin.
-- Si elle veut changer le sport du jour : donne ton avis honnête (récupération, équilibre de la semaine, sommeil), puis propose une séance adaptée via "action" (type "replace_session", date du jour concerné). Pour de la salle, utilise uniquement des exercise_ids de la liste fournie. Pour du cardio ou une activité douce, donne des steps avec des minutes.
-- Si elle veut déplacer une séance, utilise "move_session" (date d'origine et to_date dans la même semaine).
-- Sinon, action.type = "none".
+- Tu modifies l'app UNIQUEMENT via la liste "actions" (plusieurs actions possibles dans une réponse). Elle doit ensuite appuyer sur « Appliquer ». N'écris jamais que c'est fait ou enregistré : dis plutôt « appuie sur Appliquer ». Si ce qu'elle demande n'est pas faisable avec les actions, dis-le honnêtement.
+- Actions disponibles (dates au format AAAA-MM-JJ, voir planning_2_semaines) :
+  • "log_session" : enregistrer une séance qu'elle a faite (date, et log : name, kind, minutes, km, fc_moyenne, kcal, ressenti Facile/Bien/Dur). N'invente aucun chiffre : mets seulement ceux qu'elle donne.
+  • "remove_session" : retirer une séance prévue du planning (date). Une action par jour.
+  • "replace_session" : remplacer la séance d'un jour (date + session). Si elle veut changer le sport du jour, donne d'abord ton avis honnête (récupération, équilibre de la semaine, sommeil). Pour la salle, uniquement des exercise_ids de la liste fournie ; pour le cardio ou une activité douce, des steps avec des minutes.
+  • "move_session" : déplacer une séance (date d'origine, to_date dans la même semaine).
+- Si aucune modification n'est nécessaire, "actions" est une liste vide.
 - Signes d'alerte (douleur dans la poitrine, malaise ou vertige, palpitations inhabituelles, essoufflement disproportionné) : arrêt immédiat de l'effort et consultation médicale. Tu n'es pas médecin.
 - Malade ou fièvre : pas de séance. Courbatures : reprise légère possible. Douleur articulaire ou vive : arrêt de l'exercice et avis d'un professionnel de santé.
 - Signes de manque d'énergie (poids qui baisse, règles irrégulières ou absentes, fatigue persistante) : lui conseiller de manger davantage et d'en parler à un médecin.
@@ -120,29 +124,44 @@ const CHAT_SCHEMA = {
   type: 'OBJECT',
   properties: {
     reply: { type: 'STRING' },
-    action: {
-      type: 'OBJECT',
-      properties: {
-        type: { type: 'STRING', enum: ['none', 'replace_session', 'move_session'] },
-        date: { type: 'STRING' },
-        to_date: { type: 'STRING' },
-        session: {
-          type: 'OBJECT',
-          properties: {
-            name: { type: 'STRING' },
-            kind: { type: 'STRING', enum: ['salle', 'course', 'douce'] },
-            minutes: { type: 'INTEGER' },
-            tip: { type: 'STRING' },
-            exercise_ids: { type: 'ARRAY', items: { type: 'STRING' } },
-            steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { label: { type: 'STRING' }, minutes: { type: 'INTEGER' } }, required: ['label'] } },
+    actions: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          type: { type: 'STRING', enum: ['replace_session', 'move_session', 'remove_session', 'log_session'] },
+          date: { type: 'STRING' },
+          to_date: { type: 'STRING' },
+          session: {
+            type: 'OBJECT',
+            properties: {
+              name: { type: 'STRING' },
+              kind: { type: 'STRING', enum: ['salle', 'course', 'douce'] },
+              minutes: { type: 'INTEGER' },
+              tip: { type: 'STRING' },
+              exercise_ids: { type: 'ARRAY', items: { type: 'STRING' } },
+              steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { label: { type: 'STRING' }, minutes: { type: 'INTEGER' } }, required: ['label'] } },
+            },
+            required: ['name', 'kind'],
           },
-          required: ['name', 'kind'],
+          log: {
+            type: 'OBJECT',
+            properties: {
+              name: { type: 'STRING' },
+              kind: { type: 'STRING', enum: ['salle', 'course', 'douce'] },
+              minutes: { type: 'NUMBER' },
+              km: { type: 'NUMBER' },
+              fc_moyenne: { type: 'NUMBER' },
+              kcal: { type: 'NUMBER' },
+              ressenti: { type: 'STRING', enum: ['Facile', 'Bien', 'Dur'] },
+            },
+          },
         },
+        required: ['type', 'date'],
       },
-      required: ['type'],
     },
   },
-  required: ['reply', 'action'],
+  required: ['reply', 'actions'],
 };
 
 async function sendChat(text, image) {
@@ -158,8 +177,8 @@ async function sendChat(text, image) {
     const ctx = `Contexte (données de l'app, JSON) :\n${JSON.stringify(coachContext())}`;
     history[history.length - 1].parts.unshift({ text: ctx });
     const res = await gemini(history, { system: SYSTEM, schema: CHAT_SCHEMA });
-    const action = res.action && res.action.type !== 'none' ? res.action : null;
-    state.chat.push({ role: 'model', text: res.reply, action, at: Date.now() });
+    const actions = (res.actions || []).filter((a) => a && a.type && a.date);
+    state.chat.push({ role: 'model', text: res.reply, actions: actions.length ? actions : null, at: Date.now() });
   } catch (e) {
     state.chat.push({ role: 'model', text: errText(e), error: true, at: Date.now() });
   }
@@ -170,44 +189,69 @@ async function sendChat(text, image) {
   save('chat'); render(); scrollToBottom();
 }
 
+const msgActions = (m) => m.actions || (m.action && m.action.type !== 'none' ? [m.action] : []);
+
 function applyAction(i) {
   const m = state.chat[i];
-  const a = m.action;
-  if (!a) return;
-  const d = parseKey(a.date || dateKey());
-  if (a.type === 'replace_session' && a.session) {
-    const plan = weekPlan(d).slice();
-    plan[dayIdx(d)] = { custom: a.session };
-    setWeekPlan(d, plan);
-    toast('Séance mise à jour ✓');
-  } else if (a.type === 'move_session' && a.to_date) {
-    const to = parseKey(a.to_date);
-    if (wkKey(to) !== wkKey(d)) { toast('Je ne peux déplacer que dans la même semaine.'); return; }
-    moveSession(dayIdx(d), dayIdx(to), d);
-    toast(`Séance déplacée à ${DAYS[dayIdx(to)].toLowerCase()}`);
-  }
+  const done = [];
+  msgActions(m).forEach((a) => {
+    const d = parseKey(a.date || dateKey());
+    if (a.type === 'replace_session' && a.session) {
+      const plan = weekPlan(d).slice();
+      plan[dayIdx(d)] = { custom: a.session };
+      setWeekPlan(d, plan);
+      done.push('séance remplacée');
+    } else if (a.type === 'move_session' && a.to_date) {
+      const to = parseKey(a.to_date);
+      if (wkKey(to) === wkKey(d)) { moveSession(dayIdx(d), dayIdx(to), d); done.push('séance déplacée'); }
+    } else if (a.type === 'remove_session') {
+      removeDay(a.date); done.push('séance retirée');
+    } else if (a.type === 'log_session') {
+      const l = a.log || {};
+      logManual(a.date, { name: l.name, kind: l.kind, minutes: l.minutes, km: l.km, hr: l.fc_moyenne, kcal: l.kcal, feeling: l.ressenti });
+      done.push('séance enregistrée');
+    }
+  });
   m.applied = true;
   save('chat'); render();
+  toast(done.length ? `C'est fait : ${[...new Set(done)].join(', ')} ✓` : 'Rien à appliquer');
 }
 
-function actionCard(m, i) {
-  const a = m.action;
-  const s = a.session;
-  let body = '';
-  if (a.type === 'replace_session' && s) {
+function actionLine(a) {
+  const d = parseKey(a.date || dateKey());
+  const day = `${DAYS[dayIdx(d)].toLowerCase()} ${d.getDate()}`;
+  if (a.type === 'replace_session' && a.session) {
+    const s = a.session;
     const icon = kindIcon[s.kind] || kindIcon.douce;
     const lines = (s.exercise_ids || []).filter((id) => EXERCISES[id]).map((id) => `<div style="font-size: 14px; line-height: 19px">• ${esc(EXERCISES[id].name)}</div>`).join('')
       || (s.steps || []).map((st) => `<div class="row" style="gap: 10px; font-size: 14px; line-height: 19px; align-items: flex-start">${st.minutes ? `<b style="color: ${icon[2]}; width: 48px; flex: none">${st.minutes} min</b>` : ''}<span>${esc(st.label)}</span></div>`).join('');
-    const d = parseKey(a.date || dateKey());
-    body = `<div class="row" style="gap: 8px"><div class="ico" style="background: ${icon[1]}">${ic(icon[0], 17, icon[2])}</div>
-      <div><div style="font-size: 16px; font-weight: 700">${esc(s.name)}${s.minutes ? ` · ${s.minutes} min` : ''}</div><div class="foot">Remplace la séance de ${DAYS[dayIdx(d)].toLowerCase()}</div></div></div>
+    return `<div class="row" style="gap: 8px"><div class="ico" style="background: ${icon[1]}">${ic(icon[0], 17, icon[2])}</div>
+      <div><div style="font-size: 16px; font-weight: 700">${esc(s.name)}${s.minutes ? ` · ${s.minutes} min` : ''}</div><div class="foot">Remplace la séance de ${day}</div></div></div>
       <div class="stack" style="gap: 6px">${lines}</div>`;
-  } else if (a.type === 'move_session') {
-    body = `<div class="row" style="gap: 8px"><div class="ico" style="background: var(--violet-soft)">${ic('move', 17, 'var(--violet-text)')}</div>
-      <div style="font-size: 16px; font-weight: 700">Déplacer ${DAYS[dayIdx(parseKey(a.date))].toLowerCase()} → ${DAYS[dayIdx(parseKey(a.to_date))].toLowerCase()}</div></div>`;
   }
+  if (a.type === 'move_session' && a.to_date) {
+    const to = parseKey(a.to_date);
+    return `<div class="row" style="gap: 8px"><div class="ico" style="background: var(--violet-soft)">${ic('move', 17, 'var(--violet-text)')}</div>
+      <div style="font-size: 15px; font-weight: 600">Déplacer ${day} → ${DAYS[dayIdx(to)].toLowerCase()} ${to.getDate()}</div></div>`;
+  }
+  if (a.type === 'remove_session') {
+    return `<div class="row" style="gap: 8px"><div class="ico" style="background: #F1EEF7">${ic('close', 15, 'var(--sec)', 2.4)}</div>
+      <div style="font-size: 15px; font-weight: 600">Retirer la séance de ${day}</div></div>`;
+  }
+  if (a.type === 'log_session') {
+    const l = a.log || {};
+    const icon = kindIcon[l.kind] || kindIcon.douce;
+    const perf = [l.minutes && `${fmtNum(l.minutes)} min`, l.km && `${fmtNum(l.km)} km`, l.fc_moyenne && `FC ${Math.round(l.fc_moyenne)}`, l.kcal && `${Math.round(l.kcal)} kcal`, l.ressenti].filter(Boolean).join(' · ');
+    return `<div class="row" style="gap: 8px"><div class="ico" style="background: ${icon[1]}">${ic('check', 17, icon[2], 2.6)}</div>
+      <div><div style="font-size: 15px; font-weight: 600">Enregistrer : ${esc(l.name || 'séance')} (${day})</div>${perf ? `<div class="foot">${esc(perf)}</div>` : ''}</div></div>`;
+  }
+  return '';
+}
+
+function actionCard(m, i) {
+  const list = msgActions(m);
   return `<section class="card stack" style="align-self: flex-start; width: 92%; border: 1.5px solid var(--violet-soft)">
-    ${body}
+    ${list.map(actionLine).join('<div style="height: 1px; background: var(--sep)"></div>')}
     ${m.applied ? `<div class="chip soft" style="align-self: flex-start">${ic('check', 14, 'var(--violet-text)', 2.6)}Appliqué</div>` : `<div class="grid2" style="gap: 8px">
       <button class="btn p sm" data-act="apply" data-i="${i}">Appliquer</button>
       <button class="btn t sm" data-act="quick" data-text="Tu as une autre idée ?">Autre idée</button></div>`}
@@ -231,7 +275,7 @@ function viewCoach() {
   <div class="msgs" style="margin-top: 18px; padding-bottom: 120px">
     ${msgs.map((m, i) => `
       <div class="bub ${m.role === 'user' ? 'me' : 'ai'}" ${m.error ? 'style="color: var(--warn)"' : ''}>${m.image ? `<img src="${m.image}" alt="">` : ''}${esc(m.text || '')}</div>
-      ${m.action ? actionCard(m, i) : ''}`).join('')}
+      ${msgActions(m).length ? actionCard(m, i) : ''}`).join('')}
     ${state.busy === 'chat' ? '<div class="bub ai typing"><span></span><span></span><span></span></div>' : ''}
   </div>
   <div class="composer"><div class="stack" style="gap: 10px">
