@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v20';
+const APP_VERSION = 'v21';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -1229,7 +1229,9 @@ function logDetail(id) {
         <div class="foot">${e.sets.filter((x) => x.done).map((x) => d?.unit === 'time' ? `${x.reps} s` : x.kg ? `${x.kg} kg × ${x.reps}` : `${x.reps} reps`).join(' · ')}</div></div></div>`;
     }).join('')}</div>` : ''}
     ${(l.ups || []).length ? `<div class="note">${ic('arrowUp', 16, 'var(--violet-text)', 2.4)}<span>Prochaine fois : ${esc(l.ups.join(', '))}</span></div>` : ''}
-    <button class="btn t block" data-act="edit-log" data-id="${l.id}">${ic('pencil', 16, 'var(--violet-text)')}Modifier</button>`;
+    ${state.busy === 'logshot' ? `<div class="foot row" style="gap: 8px; color: var(--violet-text)"><span class="typing"><span></span><span></span><span></span></span>Le coach lit ta capture…</div>` : ''}
+    <label class="btn t block" style="cursor: pointer">${ic('watch', 16, 'var(--violet-text)')}Importer une capture Apple Watch<input type="file" accept="image/*" multiple data-act="log-shot" data-id="${l.id}" hidden></label>
+    <button class="btn w block" data-act="edit-log" data-id="${l.id}" style="box-shadow: inset 0 0 0 1px var(--sep)">${ic('pencil', 16, 'var(--violet-text)')}Modifier à la main</button>`;
 }
 
 function logSheet(id) {

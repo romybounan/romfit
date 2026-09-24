@@ -347,6 +347,7 @@ function viewCoach() {
 function scrollToBottom() { requestAnimationFrame(() => { if (state.view === 'coach') scrollTo(0, document.body.scrollHeight); }); }
 
 // ─────────────────────────── Lecture des captures Apple Watch
+const WATCH_PROMPT = 'Ce sont des captures d’écran d’une séance Apple Watch (app Forme / Fitness ou Exercice), en français ou en espagnol. Extrais : les calories actives (kcal, « Kilocalorías activas »), la fréquence cardiaque moyenne (BPM/LPM, « Frec. cardiaca media »), la durée de l’entraînement en minutes (« Duración del entreno », PAS le temps écoulé), la distance en km et le ritme moyen si présent. Mets null si une valeur n’apparaît pas. N’invente rien.';
 const WATCH_SCHEMA = {
   type: 'OBJECT',
   properties: {
@@ -361,7 +362,7 @@ async function readWatchShots(files) {
   state.active.shots = [...(state.active.shots || []), ...imgs.map((src) => src)].slice(-4);
   state.busy = true; render();
   try {
-    const res = await gemini([{ role: 'user', parts: [...imgs.map(inlineImg), { text: 'Ce sont des captures d’écran d’une séance Apple Watch (app Forme ou Exercice). Extrais les calories actives (kcal), la fréquence cardiaque moyenne (BPM), la durée totale en minutes et la distance en km si elle apparaît. Mets null si une valeur n’apparaît pas. N’invente rien.' }] }], { schema: WATCH_SCHEMA });
+    const res = await gemini([{ role: 'user', parts: [...imgs.map(inlineImg), { text: WATCH_PROMPT }] }], { schema: WATCH_SCHEMA });
     const w = state.active.watch || {};
     if (res.calories_actives != null) w.kcal = Math.round(res.calories_actives);
     if (res.fc_moyenne != null) w.hr = Math.round(res.fc_moyenne);
@@ -371,6 +372,26 @@ async function readWatchShots(files) {
   } catch (e) { toast(errText(e)); }
   // Les captures ne sont gardées que le temps de la séance
   state.busy = false; save('active'); render();
+}
+
+// Capture Apple Watch pour une séance déjà enregistrée : met à jour ses chiffres
+async function readShotsForLog(id, files) {
+  const l = state.logs.find((x) => x.id === id);
+  if (!l) return;
+  state.busy = 'logshot'; render();
+  try {
+    const imgs = await Promise.all([...files].slice(0, 4).map((f) => shrink(f, 1400)));
+    const res = await gemini([{ role: 'user', parts: [...imgs.map(inlineImg), { text: WATCH_PROMPT }] }], { schema: WATCH_SCHEMA });
+    const changed = [];
+    if (res.duree_min != null) { l.durationMin = Math.round(res.duree_min); changed.push(`${l.durationMin} min`); }
+    if (res.distance_km != null) { l.km = Math.round(res.distance_km * 100) / 100; changed.push(`${fmtNum(l.km)} km`); }
+    l.watch = { ...(l.watch || {}) };
+    if (res.fc_moyenne != null) { l.watch.hr = Math.round(res.fc_moyenne); changed.push(`FC ${l.watch.hr}`); }
+    if (res.calories_actives != null) { l.watch.kcal = Math.round(res.calories_actives); changed.push(`${l.watch.kcal} kcal`); }
+    save('logs');
+    toast(changed.length ? `Séance mise à jour : ${changed.join(' · ')} ✓` : 'Aucun chiffre trouvé sur la capture.');
+  } catch (e) { toast(errText(e)); }
+  state.busy = false; render();
 }
 
 // ─────────────────────────── Bilan de la semaine
@@ -428,5 +449,6 @@ document.addEventListener('change', async (e) => {
     sendChat($('#chatinput')?.value.trim() || '', img);
   }
   if (t.dataset.act === 'shots' && t.files.length) readWatchShots(t.files);
+  if (t.dataset.act === 'log-shot' && t.files.length) readShotsForLog(t.dataset.id, t.files);
 });
 if (state.view === 'coach') render();
