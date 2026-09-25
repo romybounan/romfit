@@ -1,6 +1,6 @@
 // Cache hors ligne : l'app fonctionne même sans réseau (à la salle, par exemple).
 // Change VERSION à chaque mise à jour pour que les téléphones récupèrent la nouvelle version.
-const VERSION = 'romfit-v29';
+const VERSION = 'romfit-v30';
 const FILES = ['./', 'index.html', 'app.js', 'data.js', 'videos.js', 'coach.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {

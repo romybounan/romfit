@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v29';
+const APP_VERSION = 'v30';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -1326,7 +1326,7 @@ const STAGE_OF = (v) => {
   if (/rem|paradox/.test(t)) return 'rem';
   if (/profund|deep|profond/.test(t)) return 'deep';
   if (/esencial|core|principal|ligero|light|leger|essentiel/.test(t)) return 'core';
-  if (/despiert|awake|eveil|reveil/.test(t)) return 'awake';
+  if (/despiert|vigil|awake|eveil|reveil/.test(t)) return 'awake';
   if (/cama|in bed|au lit/.test(t)) return null;
   if (/dormid|asleep|endormi|unspec/.test(t)) return 'asleep';
   return null;
@@ -1375,8 +1375,9 @@ function importHealth(text) {
     if (sleepMin != null && !isNaN(sleepMin)) cur.sleepMin = Math.round(sleepMin);
     if (d.phases) {
       cur.stages = d.phases;
+      // Avec les phases, le temps de sommeil exclut les éveils (comme l'app Salud)
       const asleep = d.phases.rem + d.phases.deep + d.phases.core + d.phases.asleep;
-      if (asleep && cur.sleepMin == null) cur.sleepMin = asleep;
+      if (asleep) cur.sleepMin = asleep;
     }
     if (d.fc_repos != null) cur.restHR = +d.fc_repos;
     if (d.pas != null) cur.steps = +d.pas;
