@@ -394,6 +394,25 @@ async function readShotsForLog(id, files) {
   state.busy = false; render();
 }
 
+// Analyse de la nuit par le coach, en lien avec les séances
+async function sleepCoach(key) {
+  const h = state.health[key];
+  if (!h) return;
+  const d = parseKey(key);
+  const data = {
+    nuit: key, sommeil_min: h.sleepMin, phases_min: h.stages ? { profond: h.stages.deep, essentiel: h.stages.core + h.stages.asleep, rem: h.stages.rem, eveil: h.stages.awake } : null,
+    fc_repos: h.restHR, fc_repos_7_jours: Object.entries(state.health).slice(-8).map(([k, x]) => ({ date: k, fc: x.restHR, sommeil_min: x.sleepMin })),
+    seance_veille: logsOn(addDays(d, -1)).map((l) => l.name), seance_du_jour: sessionFor(d)?.name || 'repos',
+  };
+  state.busy = 'sleep'; render();
+  try {
+    const txt = await gemini([{ role: 'user', parts: [{ text: `Analyse ma nuit en 3 à 4 phrases courtes, en français, tutoiement : ce qui est bien, ce qui peut être amélioré (conseils concrets d'hygiène du sommeil), et l'impact sur ma séance du jour. Les phases de montre sont des estimations : reste prudent, pas de diagnostic. Données (JSON) : ${JSON.stringify(data)}` }] }], { system: SYSTEM });
+    state.sleepNotes[key] = String(txt).replace(/[*#]/g, '').trim();
+    save('sleepNotes');
+  } catch (e) { toast(errText(e)); }
+  state.busy = false; render();
+}
+
 // ─────────────────────────── Bilan de la semaine
 const REVIEW_SCHEMA = {
   type: 'OBJECT',

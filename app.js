@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v27';
+const APP_VERSION = 'v28';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -12,7 +12,7 @@ const store = {
   },
 };
 
-const KEYS = ['settings', 'loads', 'logs', 'plan', 'hours', 'health', 'weights', 'chat', 'reviews', 'feedback', 'active', 'runPlace', 'optChoice'];
+const KEYS = ['settings', 'loads', 'logs', 'plan', 'hours', 'health', 'weights', 'chat', 'reviews', 'feedback', 'active', 'runPlace', 'optChoice', 'sleepNotes'];
 const state = {
   settings: store.get('settings', { name: '', week: DEFAULT_WEEK, hour: '12:30', apiKey: '', model: '', zone: null, profile: {} }),
   loads: store.get('loads', {}),        // charge de travail actuelle par exercice
@@ -27,6 +27,7 @@ const state = {
   active: store.get('active', null),    // séance en cours
   runPlace: store.get('runPlace', {}),  // tapis ou dehors, par jour
   optChoice: store.get('optChoice', {}), // vélo / marche inclinée / reformer, par jour
+  sleepNotes: store.get('sleepNotes', {}), // analyses du sommeil par le coach
   view: 'today', weekOffset: 0, sheet: null, video: null, rest: null, chartEx: 'hip-thrust', mealsOpen: false, busy: false,
 };
 const save = (...keys) => (keys.length ? keys : KEYS).forEach((k) => store.set(k, state[k]));
@@ -252,7 +253,7 @@ const thumb = (id) => (VIDEOS[id] ? `https://i.ytimg.com/vi/${VIDEOS[id].videoId
 const kindIcon = { salle: ['dumbbell', 'var(--violet-soft)', 'var(--violet-text)'], course: ['run', 'var(--run-soft)', 'var(--run)'], douce: ['bike', '#F1EEF7', 'var(--sec)'] };
 
 function tabbar() {
-  const tabs = [['today', 'today', "Aujourd'hui"], ['planning', 'calendar', 'Planning'], ['coach', 'coach', 'Coach'], ['progress', 'chart', 'Progrès']];
+  const tabs = [['today', 'today', "Aujourd'hui"], ['planning', 'calendar', 'Planning'], ['sleep', 'moon', 'Sommeil'], ['coach', 'coach', 'Coach'], ['progress', 'chart', 'Progrès']];
   const cur = ['programme'].includes(state.view) ? 'planning' : state.view;
   return `<nav class="tabbar">${tabs.map(([v, i, l]) => `<button class="tab ${cur === v ? 'on' : ''}" data-act="tab" data-v="${v}">${ic(i, 26, 'currentColor', 1.9)}<span>${l}</span></button>`).join('')}</nav>`;
 }
@@ -1067,6 +1068,128 @@ function weightSheet() {
     <button class="btn p block" data-act="save-weight">Enregistrer</button>`;
 }
 
+// ─────────────────────────── Vue : Sommeil
+// Repères généraux chez l'adulte (varient selon les personnes ; les phases d'une montre sont des estimations)
+const STAGES = {
+  deep: { label: 'Profond', color: '#3A3F9E', ref: [13, 23], role: 'La récupération physique : c’est surtout là que tes muscles se réparent après une séance.' },
+  core: { label: 'Essentiel', color: '#5B7CF0', ref: [45, 60], role: 'Le sommeil de base (léger) : il occupe la plus grande partie de la nuit.' },
+  rem: { label: 'Paradoxal (REM)', color: '#5FC3E8', ref: [20, 25], role: 'La récupération mentale : mémoire, humeur et gestion du stress.' },
+  awake: { label: 'Éveillée', color: '#F2876B', ref: null, role: 'Quelques réveils courts sont normaux, on ne s’en souvient souvent pas.' },
+};
+
+function lastNight() {
+  const keys = Object.keys(state.health).filter((k) => state.health[k].sleepMin || state.health[k].stages).sort();
+  const k = keys[keys.length - 1];
+  return k ? { key: k, ...state.health[k] } : null;
+}
+
+function hypnogram(segs) {
+  if (!segs || segs.length < 2) return '';
+  const rows = { awake: 0, rem: 1, core: 2, asleep: 2, deep: 3 };
+  const t0 = segs[0].t, t1 = Math.max(...segs.map((x) => x.t + x.m / 60));
+  const W = 310, H = 118, L = 70, span = Math.max(0.5, t1 - t0);
+  const X = (t) => L + (t - t0) / span * (W - L - 4);
+  let out = `<svg width="100%" viewBox="0 0 ${W} ${H + 18}" aria-label="Déroulé de la nuit">`;
+  ['Éveil', 'REM', 'Essentiel', 'Profond'].forEach((lab, i) => { out += `<text x="0" y="${i * 28 + 18}" font-size="11" fill="var(--sec)">${lab}</text><line x1="${L}" x2="${W}" y1="${i * 28 + 14}" y2="${i * 28 + 14}" stroke="var(--sep)"/>`; });
+  segs.forEach((x) => {
+    const r = rows[x.st];
+    const st = STAGES[x.st === 'asleep' ? 'core' : x.st];
+    out += `<rect x="${X(x.t).toFixed(1)}" y="${r * 28 + 5}" width="${Math.max(2, X(x.t + x.m / 60) - X(x.t)).toFixed(1)}" height="18" rx="4" fill="${st.color}"/>`;
+  });
+  const hh = (t) => `${Math.floor(t % 24)} h${pad(Math.round((t % 1) * 60))}`;
+  out += `<text x="${L}" y="${H + 14}" font-size="10" fill="var(--sec)">${hh(t0)}</text><text x="${W}" y="${H + 14}" font-size="10" fill="var(--sec)" text-anchor="end">${hh(t1)}</text>`;
+  return out + '</svg>';
+}
+
+function viewSleep() {
+  const n = lastNight();
+  const days = Array.from({ length: 7 }, (_, i) => addDays(new Date(), i - 6));
+  const week = days.map((d) => state.health[dateKey(d)] || {});
+  const setup = `<section class="card stack">
+    <div class="hdr" style="color: var(--sleep)">${ic('moon', 16, 'var(--sleep)')}Ajoute tes phases de sommeil</div>
+    <div class="sub" style="color: var(--label)">Pour voir le détail (REM, profond, essentiel), ajoute 3 lignes à ton raccourci « RomFit Santé ». Demande à Claude les étapes.</div>
+  </section>`;
+  if (!n) return `<h1 class="lt">Sommeil</h1><p class="sub" style="margin: 12px 4px">Synchronise l'app Santé depuis l'écran Aujourd'hui pour voir ta nuit ici.</p>${setup}`;
+  const st = n.stages;
+  const asleep = st ? st.rem + st.deep + st.core + st.asleep : n.sleepMin;
+  const total = asleep + (st ? st.awake : 0);
+  const pct = (m) => (asleep ? Math.round(m / asleep * 100) : 0);
+  const fmtH = (m) => `${Math.floor(m / 60)} h ${pad(Math.round(m % 60))}`;
+  const d = parseKey(n.key);
+  let body = '';
+  if (st) {
+    const order = ['deep', 'core', 'rem'];
+    const bar = [...order, 'awake'].map((k) => { const m = k === 'core' ? st.core + st.asleep : st[k]; return m ? `<div style="flex: ${m}; background: ${STAGES[k].color}"></div>` : ''; }).join('');
+    const rows = [...order, 'awake'].map((k) => {
+      const m = k === 'core' ? st.core + st.asleep : st[k];
+      const p = pct(m);
+      const ref = STAGES[k].ref;
+      const status = !ref ? '' : p < ref[0] ? '<span class="chip warn" style="height: 24px; font-size: 12px">Un peu bas</span>' : p > ref[1] + 5 ? '<span class="chip grey" style="height: 24px; font-size: 12px">Élevé</span>' : '<span class="chip soft" style="height: 24px; font-size: 12px">Dans la norme</span>';
+      return `<div class="li" style="align-items: flex-start">
+        <span style="width: 12px; height: 12px; border-radius: 4px; background: ${STAGES[k].color}; margin-top: 4px; flex: none"></span>
+        <div class="grow"><div class="row" style="justify-content: space-between; gap: 8px"><b style="font-size: 15px">${STAGES[k].label}</b>${status}</div>
+          <div class="foot" style="color: var(--label)">${fmtH(m)}${k !== 'awake' ? ` · ${p} %${ref ? ` (repère : ${ref[0]}-${ref[1]} %)` : ''}` : ''}</div>
+          <div class="foot">${STAGES[k].role}</div></div></div>`;
+    }).join('');
+    body = `
+    <section class="card stack" style="margin-top: 12px">
+      <div style="display: flex; height: 16px; border-radius: 8px; overflow: hidden; gap: 2px">${bar}</div>
+      ${hypnogram(st.segs)}
+      <div class="list" style="padding: 0">${rows}</div>
+    </section>
+    <section class="card stack" style="margin-top: 12px">
+      <div class="hdr" style="color: var(--sleep)">${ic('sparkle', 16, 'var(--sleep)')}Ce que ça veut dire pour toi</div>
+      ${sleepTakeaways(n, st, asleep, pct).map((t) => `<div class="row" style="gap: 8px; align-items: flex-start; font-size: 15px; line-height: 20px">${ic('check', 16, 'var(--sleep)', 2.6)}<span>${esc(t)}</span></div>`).join('')}
+      ${state.sleepNotes?.[n.key] ? `<div class="note" style="background: #E7E9FB">${ic('coach', 16, 'var(--sleep)')}<span>${esc(state.sleepNotes[n.key])}</span></div>` : ''}
+      ${state.busy === 'sleep' ? `<div class="foot row" style="gap: 8px; color: var(--sleep)"><span class="typing"><span></span><span></span><span></span></span>Le coach analyse ta nuit…</div>` : `<button class="btn t sm" data-act="sleep-coach" data-key="${n.key}" style="background: #E7E9FB; color: var(--sleep)">${ic('coach', 16, 'var(--sleep)')}${state.sleepNotes?.[n.key] ? 'Refaire l’analyse' : 'Analyser ma nuit avec le coach'}</button>`}
+    </section>`;
+  }
+  const weekBars = (() => {
+    const W = 310, H = 100, bw = 26, step = W / 7;
+    let o = `<svg width="100%" viewBox="0 0 ${W} ${H + 20}" aria-hidden="true">`;
+    const Y = (m) => (m / 600) * (H - 6);
+    o += `<line x1="0" x2="${W}" y1="${H - Y(420)}" y2="${H - Y(420)}" stroke="var(--sleep)" stroke-dasharray="4 4" opacity=".5"/><text x="${W}" y="${H - Y(420) - 4}" font-size="10" fill="var(--sleep)" text-anchor="end">7 h</text>`;
+    week.forEach((h, i) => {
+      const x = i * step + (step - bw) / 2;
+      let y = H;
+      if (h.stages) {
+        [['deep', h.stages.deep], ['core', h.stages.core + h.stages.asleep], ['rem', h.stages.rem]].forEach(([k, m]) => { const hh = Y(m); y -= hh; o += `<rect x="${x}" y="${y}" width="${bw}" height="${hh}" fill="${STAGES[k].color}"/>`; });
+      } else if (h.sleepMin) { const hh = Y(h.sleepMin); o += `<rect x="${x}" y="${H - hh}" width="${bw}" height="${hh}" rx="6" fill="var(--sleep)" opacity=".6"/>`; }
+      else o += `<rect x="${x}" y="${H - 3}" width="${bw}" height="3" rx="1.5" fill="#E3DEEF"/>`;
+      o += `<text x="${x + bw / 2}" y="${H + 15}" text-anchor="middle" font-size="11" fill="var(--sec)">${'LMMJVSD'[dayIdx(days[i])]}</text>`;
+    });
+    return o + '</svg>';
+  })();
+  return `
+  <div class="cap">Nuit du ${fmtShort(addDays(d, -1))} au ${fmtShort(d)}</div>
+  <h1 class="lt">Sommeil</h1>
+  <section class="card row" style="margin-top: 16px; gap: 16px">
+    <div class="grow"><div class="foot">Temps de sommeil</div><div><span class="big" style="color: var(--sleep)">${Math.floor(asleep / 60)}</span><span class="unit"> h </span><span class="big" style="color: var(--sleep)">${pad(Math.round(asleep % 60))}</span><span class="unit"> min</span></div></div>
+    ${st ? `<div style="text-align: right"><div class="foot">Au total</div><div style="font-size: 17px; font-weight: 700">${fmtH(total)}</div></div>` : ''}
+  </section>
+  ${body || setup}
+  <h2 class="sec">7 dernières nuits</h2>
+  <section class="card">${weekBars}</section>
+  <p class="foot" style="margin: 10px 4px 0">Repères généraux pour un adulte : 7 h de sommeil ou plus. Les phases mesurées par une montre sont des estimations, utiles pour suivre des tendances.</p>`;
+}
+
+function sleepTakeaways(n, st, asleep, pct) {
+  const out = [];
+  const day = parseKey(n.key);
+  const s = sessionFor(day);
+  const yest = logsOn(addDays(day, -1)).slice(-1)[0];
+  if (asleep >= 420) out.push(`${Math.floor(asleep / 60)} h ${pad(Math.round(asleep % 60))} de sommeil : c'est dans la recommandation de 7 h ou plus, une bonne base pour récupérer et progresser.`);
+  else out.push(`Moins de 7 h cette nuit : ta récupération sera un peu moins bonne. Si tu te sens fatiguée, garde des charges stables aujourd'hui plutôt que de chercher un record.`);
+  const deepP = pct(st.deep);
+  if (deepP < 13) out.push(`Peu de sommeil profond (${deepP} %). C'est lui qui répare tes muscles : un coucher régulier, pas d'écran ni de repas lourd juste avant et une chambre fraîche l'aident.`);
+  else out.push(`Sommeil profond à ${deepP} % : bon pour la réparation de tes muscles${yest ? ` après ta séance d'hier (${yest.name.toLowerCase()})` : ''}.`);
+  const remP = pct(st.rem);
+  if (remP < 20) out.push(`REM un peu bas (${remP} %). Il augmente surtout en fin de nuit : dormir un peu plus longtemps ou te réveiller à heure fixe aide.`);
+  else out.push(`REM à ${remP} % : bonne récupération mentale (mémoire, humeur, stress).`);
+  if (s && !s.optional) out.push(asleep >= 420 && deepP >= 13 ? `Tu es bien reposée pour ta séance d'aujourd'hui (${s.name}).` : `Pour ta séance d'aujourd'hui (${s.name}) : échauffe-toi bien et écoute tes sensations.`);
+  return out;
+}
+
 // ─────────────────────────── Réglages
 function viewSettings() {
   const st = state.settings;
@@ -1152,16 +1275,22 @@ function feedbackSheet() {
 function parseHealthText(text) {
   const out = {};
   const num = (v) => { const m = String(v).replace(/\s/g, '').replace(/(\d)\.(?=\d{3}(\D|$))/g, '$1').match(/-?\d+(?:[.,]\d+)?/); return m ? parseFloat(m[0].replace(',', '.')) : null; };
-  // Regroupe les lignes : une liste de mesures (une par ligne, sans « : ») s'ajoute à la clé précédente et s'additionne
+  // Regroupe les lignes par clé : une liste (une valeur par ligne) s'ajoute à la clé précédente
+  const KEY = /^\s*(sommeil|sueno|sueño|sleep|fc_?\w*|pas\w*|pasos|steps|phases?|fases?|durees?|duraciones|debuts?|inicios?|seance\w*|kcal\w*|poids|weight|date)\s*:\s*(.*)$/i;
   const entries = [];
+  const lists = {};
   String(text).split(/\n|;/).forEach((line) => {
-    const i = line.indexOf(':');
-    if (i >= 0) entries.push([line.slice(0, i), [line.slice(i + 1).trim()].filter(Boolean)]);
-    else if (entries.length && num(line) != null) entries[entries.length - 1][1].push(line.trim());
+    const m = line.match(KEY);
+    if (m) entries.push([m[1], [m[2].trim()].filter(Boolean)]);
+    else if (entries.length && line.trim()) entries[entries.length - 1][1].push(line.trim());
   });
   entries.forEach(([k, vals]) => {
     const key = k.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
     if (!vals.length) return;
+    // Phases du sommeil : listes parallèles (phase, durée, début)
+    if (/^(phase|fase)/.test(key)) { lists.phases = vals; return; }
+    if (/^(duree|duracion)/.test(key)) { lists.durees = vals; return; }
+    if (/^(debut|inicio)/.test(key)) { lists.debuts = vals; return; }
     const raw = vals.length > 1 && !/fc|repos|poids|date/.test(key) ? String(vals.reduce((n, v) => n + (num(v) || 0), 0)) : vals[0];
     if (/sommeil|sleep|sueno|dormi/.test(key)) {
       const h = raw.match(/(\d+(?:[.,]\d+)?)\s*h/i), mn = raw.match(/(\d+)\s*min/i);
@@ -1187,7 +1316,44 @@ function parseHealthText(text) {
     else if (/poids|weight/.test(key)) out.poids = num(raw);
     else if (/date/.test(key)) out.date = raw.slice(0, 10);
   });
+  if (lists.phases && lists.durees) out.phases = sleepStages(lists.phases, lists.durees, lists.debuts || [], num);
   return out;
+}
+
+// Phases du sommeil (noms Apple en espagnol, anglais ou français) → minutes par phase + déroulé de la nuit
+const STAGE_OF = (v) => {
+  const t = String(v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/rem|paradox/.test(t)) return 'rem';
+  if (/profund|deep|profond/.test(t)) return 'deep';
+  if (/esencial|core|principal|ligero|light|leger|essentiel/.test(t)) return 'core';
+  if (/despiert|awake|eveil|reveil/.test(t)) return 'awake';
+  if (/cama|in bed|au lit/.test(t)) return null;
+  if (/dormid|asleep|endormi|unspec/.test(t)) return 'asleep';
+  return null;
+};
+function sleepStages(phases, durees, debuts, num) {
+  const toMin = (v) => {
+    const hms = String(v).match(/(\d+):(\d{2}):(\d{2})/);
+    if (hms) return +hms[1] * 60 + +hms[2] + +hms[3] / 60;
+    const n = num(v);
+    return n == null ? 0 : n > 90 ? n / 60 : n;   // secondes → minutes (une phase dépasse rarement 90 min)
+  };
+  const toTime = (v) => { const all = [...String(v).matchAll(/(\d{1,2})[:h](\d{2})(?::\d{2})?/g)]; const m = all[all.length - 1]; return m ? +m[1] + +m[2] / 60 : null; };
+  const totals = { rem: 0, deep: 0, core: 0, awake: 0, asleep: 0 };
+  const segs = [];
+  phases.forEach((p, i) => {
+    const st = STAGE_OF(p);
+    if (!st) return;
+    const m = toMin(durees[i]);
+    totals[st] += m;
+    const t = toTime(debuts[i]);
+    if (t != null) segs.push({ st, t, m });
+  });
+  Object.keys(totals).forEach((k) => { totals[k] = Math.round(totals[k]); });
+  // Remet les débuts dans l'ordre de la nuit (après minuit = +24 h)
+  segs.forEach((x) => { if (x.t < 15) x.t += 24; });
+  segs.sort((a, b) => a.t - b.t);
+  return { ...totals, segs: segs.map((x) => ({ st: x.st, t: Math.round(x.t * 100) / 100, m: Math.round(x.m * 10) / 10 })) };
 }
 
 function importHealth(text) {
@@ -1202,6 +1368,11 @@ function importHealth(text) {
     const sleepMin = d.sommeil_min ?? (d.sommeil_h != null ? d.sommeil_h * 60 : null)
       ?? (Array.isArray(d.sommeil_segments) ? d.sommeil_segments.reduce((a, b) => a + (+b || 0), 0) : null);
     if (sleepMin != null && !isNaN(sleepMin)) cur.sleepMin = Math.round(sleepMin);
+    if (d.phases) {
+      cur.stages = d.phases;
+      const asleep = d.phases.rem + d.phases.deep + d.phases.core + d.phases.asleep;
+      if (asleep && cur.sleepMin == null) cur.sleepMin = asleep;
+    }
     if (d.fc_repos != null) cur.restHR = +d.fc_repos;
     if (d.pas != null) cur.steps = +d.pas;
     if (d.kcal_actives != null) cur.kcal = +d.kcal_actives;
@@ -1227,7 +1398,7 @@ function importHealth(text) {
 }
 
 // ─────────────────────────── Rendu
-const VIEWS = { today: viewToday, planning: viewPlanning, programme: viewProgramme, workout: viewWorkout, finish: viewFinish, progress: viewProgress, settings: viewSettings };
+const VIEWS = { sleep: viewSleep, today: viewToday, planning: viewPlanning, programme: viewProgramme, workout: viewWorkout, finish: viewFinish, progress: viewProgress, settings: viewSettings };
 function logDetail(id) {
   const l = state.logs.find((x) => x.id === id);
   if (!l) return '';
@@ -1301,6 +1472,7 @@ const ACTIONS = {
   preview: (t) => { state.sheet = { type: 'day', arg: t.dataset.date }; render(); },
   'run-place': (t) => { state.runPlace[t.dataset.date] = t.dataset.v; save('runPlace'); render(); },
   'opt-choice': (t) => { state.optChoice[t.dataset.date] = t.dataset.v; save('optChoice'); render(); },
+  'sleep-coach': (t) => sleepCoach(t.dataset.key),
   'mark-done': (t) => {
     const dk = t.dataset.date;
     const s = sessionFor(parseKey(dk));
