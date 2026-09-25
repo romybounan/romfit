@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v28';
+const APP_VERSION = 'v29';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -1332,11 +1332,16 @@ const STAGE_OF = (v) => {
   return null;
 };
 function sleepStages(phases, durees, debuts, num) {
+  // Durées au format h:mm:ss, mm:ss ou en secondes (Atajos mélange les formats selon la longueur)
+  const clockFormat = durees.some((v) => /\d:\d{2}/.test(v));
   const toMin = (v) => {
     const hms = String(v).match(/(\d+):(\d{2}):(\d{2})/);
     if (hms) return +hms[1] * 60 + +hms[2] + +hms[3] / 60;
+    const ms = String(v).match(/(\d+):(\d{2})/);
+    if (ms) return +ms[1] + +ms[2] / 60;
     const n = num(v);
-    return n == null ? 0 : n > 90 ? n / 60 : n;   // secondes → minutes (une phase dépasse rarement 90 min)
+    if (n == null) return 0;
+    return clockFormat || n > 90 ? n / 60 : n;   // nombre seul = secondes
   };
   const toTime = (v) => { const all = [...String(v).matchAll(/(\d{1,2})[:h](\d{2})(?::\d{2})?/g)]; const m = all[all.length - 1]; return m ? +m[1] + +m[2] / 60 : null; };
   const totals = { rem: 0, deep: 0, core: 0, awake: 0, asleep: 0 };
