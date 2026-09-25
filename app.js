@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v31';
+const APP_VERSION = 'v32';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -1071,11 +1071,27 @@ function weightSheet() {
 // ─────────────────────────── Vue : Sommeil
 // Repères généraux chez l'adulte (varient selon les personnes ; les phases d'une montre sont des estimations)
 const STAGES = {
-  deep: { label: 'Profond', color: '#3A3F9E', ref: [13, 23], role: 'La récupération physique : c’est surtout là que tes muscles se réparent après une séance.' },
-  core: { label: 'Essentiel', color: '#5B7CF0', ref: [45, 60], role: 'Le sommeil de base (léger) : il occupe la plus grande partie de la nuit.' },
-  rem: { label: 'Paradoxal (REM)', color: '#5FC3E8', ref: [20, 25], role: 'La récupération mentale : mémoire, humeur et gestion du stress.' },
-  awake: { label: 'Éveillée', color: '#F2876B', ref: null, role: 'Quelques réveils courts sont normaux, on ne s’en souvient souvent pas.' },
+  deep: {
+    label: 'Profond', color: '#3A3F9E', ref: [13, 23],
+    role: 'La récupération physique : c’est surtout là que tes muscles se réparent après une séance. Il se concentre plutôt en début de nuit.',
+    low: 'coucher tardif ou à des heures irrégulières, alcool, repas lourd ou sport intense juste avant de dormir, chambre trop chaude, stress. Il baisse aussi un peu naturellement avec l’âge.',
+    high: 'grosse journée physique, manque de sommeil les nuits précédentes (le corps « rattrape »), coucher régulier.',
+  },
+  core: {
+    label: 'Essentiel', color: '#5B7CF0', ref: [45, 60],
+    role: 'Le sommeil de base, plus léger : il occupe la plus grande partie de la nuit et fait le lien entre les autres phases.',
+    low: 'quand le profond et le REM prennent plus de place, par exemple après une grosse journée ou une nuit de rattrapage.',
+    high: 'sommeil plus léger (bruit, lumière, chaleur, stress), ou moins de profond et de REM cette nuit-là.',
+  },
+  rem: {
+    label: 'REM', color: '#5FC3E8', ref: [20, 25],
+    role: 'La récupération mentale : mémoire, humeur et gestion du stress. Il se concentre surtout en fin de nuit.',
+    low: 'nuit trop courte ou réveil avancé par une alarme (on coupe la fin de nuit, riche en REM), alcool, certains médicaments, stress.',
+    high: 'rattrapage après des nuits courtes, nuit plus longue que d’habitude. Les montres estiment aussi le REM avec une certaine marge d’erreur.',
+  },
 };
+// Couleur des éveils dans le déroulé de la nuit
+const AWAKE_COLOR = '#F2876B';
 
 function lastNight() {
   const keys = Object.keys(state.health).filter((k) => state.health[k].sleepMin || state.health[k].stages).sort();
@@ -1085,13 +1101,14 @@ function lastNight() {
 
 function hypnogram(segs) {
   if (!segs || segs.length < 2) return '';
-  const rows = { awake: 0, rem: 1, core: 2, asleep: 2, deep: 3 };
+  const rows = { rem: 0, core: 1, asleep: 1, deep: 2 };
   const t0 = segs[0].t, t1 = Math.max(...segs.map((x) => x.t + x.m / 60));
-  const W = 310, H = 118, L = 70, span = Math.max(0.5, t1 - t0);
+  const W = 310, H = 90, L = 70, span = Math.max(0.5, t1 - t0);
   const X = (t) => L + (t - t0) / span * (W - L - 4);
   let out = `<svg width="100%" viewBox="0 0 ${W} ${H + 18}" aria-label="Déroulé de la nuit">`;
-  ['Éveil', 'REM', 'Essentiel', 'Profond'].forEach((lab, i) => { out += `<text x="0" y="${i * 28 + 18}" font-size="11" fill="var(--sec)">${lab}</text><line x1="${L}" x2="${W}" y1="${i * 28 + 14}" y2="${i * 28 + 14}" stroke="var(--sep)"/>`; });
+  ['REM', 'Essentiel', 'Profond'].forEach((lab, i) => { out += `<text x="0" y="${i * 28 + 18}" font-size="11" fill="var(--sec)">${lab}</text><line x1="${L}" x2="${W}" y1="${i * 28 + 14}" y2="${i * 28 + 14}" stroke="var(--sep)"/>`; });
   segs.forEach((x) => {
+    if (x.st === 'awake') return;
     const r = rows[x.st];
     const st = STAGES[x.st === 'asleep' ? 'core' : x.st];
     out += `<rect x="${X(x.t).toFixed(1)}" y="${r * 28 + 5}" width="${Math.max(2, X(x.t + x.m / 60) - X(x.t)).toFixed(1)}" height="18" rx="4" fill="${st.color}"/>`;
@@ -1119,17 +1136,29 @@ function viewSleep() {
   let body = '';
   if (st) {
     const order = ['deep', 'core', 'rem'];
-    const bar = [...order, 'awake'].map((k) => { const m = k === 'core' ? st.core + st.asleep : st[k]; return m ? `<div style="flex: ${m}; background: ${STAGES[k].color}"></div>` : ''; }).join('');
-    const rows = [...order, 'awake'].map((k) => {
+    const bar = order.map((k) => { const m = k === 'core' ? st.core + st.asleep : st[k]; return m ? `<div style="flex: ${m}; background: ${STAGES[k].color}"></div>` : ''; }).join('');
+    const open = state.sleepOpen || {};
+    const rows = order.map((k) => {
+      const S = STAGES[k];
       const m = k === 'core' ? st.core + st.asleep : st[k];
       const p = pct(m);
-      const ref = STAGES[k].ref;
-      const status = !ref ? '' : p < ref[0] ? '<span class="chip warn" style="height: 24px; font-size: 12px">Un peu bas</span>' : p > ref[1] + 5 ? '<span class="chip grey" style="height: 24px; font-size: 12px">Élevé</span>' : '<span class="chip soft" style="height: 24px; font-size: 12px">Dans la norme</span>';
-      return `<div class="li" style="align-items: flex-start">
-        <span style="width: 12px; height: 12px; border-radius: 4px; background: ${STAGES[k].color}; margin-top: 4px; flex: none"></span>
-        <div class="grow"><div class="row" style="justify-content: space-between; gap: 8px"><b style="font-size: 15px">${STAGES[k].label}</b>${status}</div>
-          <div class="foot" style="color: var(--label)">${fmtH(m)}${k !== 'awake' ? ` · ${p} %${ref ? ` (repère : ${ref[0]}-${ref[1]} %)` : ''}` : ''}</div>
-          <div class="foot">${STAGES[k].role}</div></div></div>`;
+      const lvl = p < S.ref[0] ? 'low' : p > S.ref[1] ? 'high' : 'ok';
+      const status = { low: '<span class="chip warn" style="height: 24px; font-size: 12px">Plus bas</span>', high: '<span class="chip grey" style="height: 24px; font-size: 12px">Plus élevé</span>', ok: '<span class="chip soft" style="height: 24px; font-size: 12px">Dans la norme</span>' }[lvl];
+      const isOpen = open[k];
+      return `<div class="li" style="display: block">
+        <button data-act="sleep-toggle" data-k="${k}" aria-expanded="${!!isOpen}" style="width: 100%; display: flex; align-items: center; gap: 10px; text-align: left">
+          <span style="width: 12px; height: 12px; border-radius: 4px; background: ${S.color}; flex: none"></span>
+          <div class="grow"><b style="font-size: 15px">${S.label}</b><div class="foot" style="color: var(--label)">${fmtH(m)} · ${p} %</div></div>
+          ${status}
+          <span style="transform: rotate(${isOpen ? -90 : 90}deg); display: flex">${ic('chevR', 16, 'var(--ter)', 2.4)}</span>
+        </button>
+        ${isOpen ? `<div class="stack" style="gap: 6px; margin: 10px 0 2px 22px; font-size: 14px; line-height: 19px">
+          <div>${S.role}</div>
+          <div class="foot">Repère habituel : ${S.ref[0]} à ${S.ref[1]} % du sommeil.</div>
+          <div><b>Peut être plus bas à cause de :</b> ${S.low}</div>
+          <div><b>Peut être plus élevé après :</b> ${S.high}</div>
+        </div>` : ''}
+      </div>`;
     }).join('');
     body = `
     <section class="card stack" style="margin-top: 12px">
@@ -1138,8 +1167,12 @@ function viewSleep() {
       <div class="list" style="padding: 0">${rows}</div>
     </section>
     <section class="card stack" style="margin-top: 12px">
-      <div class="hdr" style="color: var(--sleep)">${ic('sparkle', 16, 'var(--sleep)')}Ce que ça veut dire pour toi</div>
-      ${sleepTakeaways(n, st, asleep, pct).map((t) => `<div class="row" style="gap: 8px; align-items: flex-start; font-size: 15px; line-height: 20px">${ic('check', 16, 'var(--sleep)', 2.6)}<span>${esc(t)}</span></div>`).join('')}
+      <button data-act="sleep-toggle" data-k="tips" class="row" style="justify-content: space-between; width: 100%; text-align: left">
+        <span class="hdr" style="color: var(--sleep)">${ic('sparkle', 16, 'var(--sleep)')}Ce que ça veut dire pour toi</span>
+        <span style="transform: rotate(${open.tips ? -90 : 90}deg); display: flex">${ic('chevR', 16, 'var(--ter)', 2.4)}</span>
+      </button>
+      ${sleepTakeaways(n, st, asleep, pct).slice(0, open.tips ? 9 : 1).map((t) => `<div class="row" style="gap: 8px; align-items: flex-start; font-size: 15px; line-height: 20px">${ic('check', 16, 'var(--sleep)', 2.6)}<span>${esc(t)}</span></div>`).join('')}
+      ${!open.tips ? '<button class="link" data-act="sleep-toggle" data-k="tips" style="font-size: 14px">Voir plus</button>' : ''}
       ${state.sleepNotes?.[n.key] ? `<div class="note" style="background: #E7E9FB">${ic('coach', 16, 'var(--sleep)')}<span>${esc(state.sleepNotes[n.key])}</span></div>` : ''}
       ${state.busy === 'sleep' ? `<div class="foot row" style="gap: 8px; color: var(--sleep)"><span class="typing"><span></span><span></span><span></span></span>Le coach analyse ta nuit…</div>` : `<button class="btn t sm" data-act="sleep-coach" data-key="${n.key}" style="background: #E7E9FB; color: var(--sleep)">${ic('coach', 16, 'var(--sleep)')}${state.sleepNotes?.[n.key] ? 'Refaire l’analyse' : 'Analyser ma nuit avec le coach'}</button>`}
     </section>`;
@@ -1165,7 +1198,7 @@ function viewSleep() {
   <h1 class="lt">Sommeil</h1>
   <section class="card row" style="margin-top: 16px; gap: 16px">
     <div class="grow"><div class="foot">Temps de sommeil</div><div><span class="big" style="color: var(--sleep)">${Math.floor(asleep / 60)}</span><span class="unit"> h </span><span class="big" style="color: var(--sleep)">${pad(Math.round(asleep % 60))}</span><span class="unit"> min</span></div></div>
-    ${st ? `<div style="text-align: right"><div class="foot">Au total</div><div style="font-size: 17px; font-weight: 700">${fmtH(total)}</div></div>` : ''}
+
   </section>
   ${body || setup}
   <h2 class="sec">7 dernières nuits</h2>
@@ -1480,6 +1513,7 @@ const ACTIONS = {
   'run-place': (t) => { state.runPlace[t.dataset.date] = t.dataset.v; save('runPlace'); render(); },
   'opt-choice': (t) => { state.optChoice[t.dataset.date] = t.dataset.v; save('optChoice'); render(); },
   'sleep-coach': (t) => sleepCoach(t.dataset.key),
+  'sleep-toggle': (t) => { state.sleepOpen = { ...(state.sleepOpen || {}), [t.dataset.k]: !(state.sleepOpen || {})[t.dataset.k] }; const y = scrollY; render(); scrollTo(0, y); },
   'mark-done': (t) => {
     const dk = t.dataset.date;
     const s = sessionFor(parseKey(dk));
