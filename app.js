@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v26';
+const APP_VERSION = 'v27';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -456,11 +456,6 @@ function healthTiles(d) {
       <div class="foot">Apple Watch</div>
     </section>
   </div>
-  <section class="card row" style="margin-top: 12px; gap: 12px">
-    <div class="ico" style="background: var(--run-soft)">${ic('run', 17, 'var(--run)')}</div>
-    <div class="grow"><div class="hdr" style="color: var(--run)">Pas</div><div class="foot">Aujourd'hui, à la dernière synchronisation</div></div>
-    ${today.steps != null ? `<div><span class="big">${Math.round(today.steps).toLocaleString('fr-FR')}</span></div>` : '<div class="big" style="color: var(--ter)">—</div>'}
-  </section>
   <button class="btn t block sm" data-act="health-paste" style="margin-top: 12px">${ic('watch', 16, 'var(--violet-text)')}Importer ma séance Apple Watch</button>
   <button class="foot row" data-act="health-sync" style="gap: 6px; margin: 8px 4px 0">${ic('watch', 14, 'var(--sec)')}${last ? `Données du ${fmtShort(parseKey(last))} · ` : ''}<span style="color: var(--violet-text); font-weight: 600">Synchroniser Santé</span></button>`;
 }
