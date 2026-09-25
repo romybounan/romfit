@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v30';
+const APP_VERSION = 'v31';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -1451,6 +1451,7 @@ function logSheet(id) {
 const SHEETS = { detail: (a) => logDetail(a), log: (a) => logSheet(a), move: (a) => moveSheet(a), day: (a) => daySheet(a), weight: weightSheet, feedback: feedbackSheet };
 
 function render() {
+  try { sessionStorage.setItem('romfit:view', JSON.stringify({ v: state.view, w: state.weekOffset })); } catch {}
   if (['workout', 'finish'].includes(state.view) && !state.active) state.view = 'today';
   const fn = VIEWS[state.view] || viewToday;
   const withTabs = !['workout', 'finish'].includes(state.view);
@@ -1713,6 +1714,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.healthPending) render(); });
 if (!state.settings.since) { state.settings.since = dateKey(); store.set('settings', state.settings); }
 checkHash();
+try { const last = JSON.parse(sessionStorage.getItem('romfit:view') || 'null'); if (last && ['today', 'planning', 'sleep', 'coach', 'progress', 'programme', 'settings'].includes(last.v)) { state.view = last.v; state.weekOffset = last.w || 0; } } catch {}
 if (state.active) state.view = 'workout';
 render();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
