@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v23';
+const APP_VERSION = 'v24';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -1152,12 +1152,17 @@ function feedbackSheet() {
 function parseHealthText(text) {
   const out = {};
   const num = (v) => { const m = String(v).replace(/\s/g, '').replace(/(\d)\.(?=\d{3}(\D|$))/g, '$1').match(/-?\d+(?:[.,]\d+)?/); return m ? parseFloat(m[0].replace(',', '.')) : null; };
+  // Regroupe les lignes : une liste de mesures (une par ligne, sans « : ») s'ajoute à la clé précédente et s'additionne
+  const entries = [];
   String(text).split(/\n|;/).forEach((line) => {
     const i = line.indexOf(':');
-    if (i < 0) return;
-    const key = line.slice(0, i).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-    const raw = line.slice(i + 1).trim();
-    if (!raw) return;
+    if (i >= 0) entries.push([line.slice(0, i), [line.slice(i + 1).trim()].filter(Boolean)]);
+    else if (entries.length && num(line) != null) entries[entries.length - 1][1].push(line.trim());
+  });
+  entries.forEach(([k, vals]) => {
+    const key = k.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    if (!vals.length) return;
+    const raw = vals.length > 1 && !/fc|repos|poids|date/.test(key) ? String(vals.reduce((n, v) => n + (num(v) || 0), 0)) : vals[0];
     if (/sommeil|sleep|sueno|dormi/.test(key)) {
       const h = raw.match(/(\d+(?:[.,]\d+)?)\s*h/i), mn = raw.match(/(\d+)\s*min/i);
       let v;
