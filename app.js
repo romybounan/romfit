@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v32';
+const APP_VERSION = 'v33';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -1095,8 +1095,8 @@ const AWAKE_COLOR = '#F2876B';
 
 function lastNight() {
   const keys = Object.keys(state.health).filter((k) => state.health[k].sleepMin || state.health[k].stages).sort();
-  const k = keys[keys.length - 1];
-  return k ? { key: k, ...state.health[k] } : null;
+  const k = keys.includes(state.sleepDay) ? state.sleepDay : keys[keys.length - 1];
+  return k ? { key: k, ...state.health[k], latest: k === keys[keys.length - 1] } : null;
 }
 
 function hypnogram(segs) {
@@ -1181,28 +1181,38 @@ function viewSleep() {
     const W = 310, H = 100, bw = 26, step = W / 7;
     let o = `<svg width="100%" viewBox="0 0 ${W} ${H + 20}" aria-hidden="true">`;
     const Y = (m) => (m / 600) * (H - 6);
-    o += `<line x1="0" x2="${W}" y1="${H - Y(420)}" y2="${H - Y(420)}" stroke="var(--sleep)" stroke-dasharray="4 4" opacity=".5"/><text x="${W}" y="${H - Y(420) - 4}" font-size="10" fill="var(--sleep)" text-anchor="end">7 h</text>`;
+    o += `<line x1="0" x2="${W}" y1="${H - Y(420)}" y2="${H - Y(420)}" stroke="var(--sleep)" stroke-dasharray="4 4" opacity=".5"/><text x="2" y="${H - Y(420) - 4}" font-size="10" fill="var(--sleep)">7 h</text>`;
     week.forEach((h, i) => {
       const x = i * step + (step - bw) / 2;
+      const k = dateKey(days[i]);
+      const has = h.stages || h.sleepMin;
+      if (has) o += `<g data-act="sleep-night" data-key="${k}" style="cursor: pointer"><rect x="${i * step}" y="0" width="${step}" height="${H + 20}" fill="${k === n.key ? 'var(--sleep)' : 'transparent'}" opacity="${k === n.key ? 0.08 : 0}" rx="8"/>`;
       let y = H;
       if (h.stages) {
         [['deep', h.stages.deep], ['core', h.stages.core + h.stages.asleep], ['rem', h.stages.rem]].forEach(([k, m]) => { const hh = Y(m); y -= hh; o += `<rect x="${x}" y="${y}" width="${bw}" height="${hh}" fill="${STAGES[k].color}"/>`; });
       } else if (h.sleepMin) { const hh = Y(h.sleepMin); o += `<rect x="${x}" y="${H - hh}" width="${bw}" height="${hh}" rx="6" fill="var(--sleep)" opacity=".6"/>`; }
       else o += `<rect x="${x}" y="${H - 3}" width="${bw}" height="3" rx="1.5" fill="#E3DEEF"/>`;
-      o += `<text x="${x + bw / 2}" y="${H + 15}" text-anchor="middle" font-size="11" fill="var(--sec)">${'LMMJVSD'[dayIdx(days[i])]}</text>`;
+      o += `<text x="${x + bw / 2}" y="${H + 15}" text-anchor="middle" font-size="11" fill="${k === n.key ? 'var(--sleep)' : 'var(--sec)'}" font-weight="${k === n.key ? 700 : 400}">${'LMMJVSD'[dayIdx(days[i])]}</text>`;
+      if (has) o += '</g>';
     });
     return o + '</svg>';
   })();
   return `
   <div class="cap">Nuit du ${fmtShort(addDays(d, -1))} au ${fmtShort(d)}</div>
-  <h1 class="lt">Sommeil</h1>
+  <div class="row" style="justify-content: space-between"><h1 class="lt">Sommeil</h1>${!n.latest ? '<button class="link" data-act="sleep-night" data-key="" style="font-size: 15px">Dernière nuit</button>' : ''}</div>
   <section class="card row" style="margin-top: 16px; gap: 16px">
     <div class="grow"><div class="foot">Temps de sommeil</div><div><span class="big" style="color: var(--sleep)">${Math.floor(asleep / 60)}</span><span class="unit"> h </span><span class="big" style="color: var(--sleep)">${pad(Math.round(asleep % 60))}</span><span class="unit"> min</span></div></div>
 
   </section>
   ${body || setup}
   <h2 class="sec">7 dernières nuits</h2>
-  <section class="card">${weekBars}</section>
+  <section class="card stack" style="gap: 8px">
+    ${weekBars}
+    <div class="row" style="gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--sec)">
+      ${['deep', 'core', 'rem'].map((k) => `<span class="row" style="gap: 6px"><span style="width: 10px; height: 10px; border-radius: 3px; background: ${STAGES[k].color}"></span>${STAGES[k].label}</span>`).join('')}
+    </div>
+    <div class="foot">Touche une nuit pour voir son analyse.</div>
+  </section>
   <p class="foot" style="margin: 10px 4px 0">Repères généraux pour un adulte : 7 h de sommeil ou plus. Les phases mesurées par une montre sont des estimations, utiles pour suivre des tendances.</p>`;
 }
 
@@ -1513,6 +1523,7 @@ const ACTIONS = {
   'run-place': (t) => { state.runPlace[t.dataset.date] = t.dataset.v; save('runPlace'); render(); },
   'opt-choice': (t) => { state.optChoice[t.dataset.date] = t.dataset.v; save('optChoice'); render(); },
   'sleep-coach': (t) => sleepCoach(t.dataset.key),
+  'sleep-night': (t) => { state.sleepDay = t.dataset.key || null; render(); scrollTo(0, 0); },
   'sleep-toggle': (t) => { state.sleepOpen = { ...(state.sleepOpen || {}), [t.dataset.k]: !(state.sleepOpen || {})[t.dataset.k] }; const y = scrollY; render(); scrollTo(0, y); },
   'mark-done': (t) => {
     const dk = t.dataset.date;
