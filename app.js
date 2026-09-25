@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v22';
+const APP_VERSION = 'v23';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -1158,7 +1158,7 @@ function parseHealthText(text) {
     const key = line.slice(0, i).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
     const raw = line.slice(i + 1).trim();
     if (!raw) return;
-    if (/sommeil|sleep/.test(key)) {
+    if (/sommeil|sleep|sueno|dormi/.test(key)) {
       const h = raw.match(/(\d+(?:[.,]\d+)?)\s*h/i), mn = raw.match(/(\d+)\s*min/i);
       let v;
       if (h || mn) v = (h ? parseFloat(h[1].replace(',', '.')) * 60 : 0) + (mn ? +mn[1] : 0);
@@ -1176,7 +1176,7 @@ function parseHealthText(text) {
       else if (/fc|cardi|bpm/.test(key)) out.seance_fc = v;
       else if (/min|dur/.test(key)) out.seance_min = v > 300 ? v / 60 : v;   // secondes → minutes si besoin
     } else if (/repos|resting/.test(key)) out.fc_repos = num(raw);
-    else if (/pas|steps/.test(key)) out.pas = num(raw);
+    else if (/^pas|pasos|steps/.test(key)) out.pas = num(raw);
     else if (/kcal|energie|calorie/.test(key)) out.kcal_actives = num(raw);
     else if (/poids|weight/.test(key)) out.poids = num(raw);
     else if (/date/.test(key)) out.date = raw.slice(0, 10);
