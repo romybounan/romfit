@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v45';
+const APP_VERSION = 'v46';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -551,7 +551,7 @@ function viewPlanning() {
       <div class="d"><div class="foot" style="font-weight: 600">${dn}</div><div style="font-size: 20px; font-weight: 700">${d.getDate()}</div></div>
       <div class="ico" style="background: ${icon[1]}">${ic(icon[0], 17, icon[2])}</div>
       <button class="grow" style="text-align: left; min-width: 0" ${done ? `data-act="log-detail" data-id="${logsOn(d).slice(-1)[0].id}"` : `data-act="preview" data-date="${dateKey(d)}"`}>
-        <div style="font-size: 16px; font-weight: 600; color: ${s || extra ? 'var(--label)' : '#8E8A9C'}">${s ? esc(s.name) : extra ? esc(extra.name) : state.skipped[dateKey(d)] ? 'Séance annulée' : moved ? 'Séance déplacée' : 'Repos'}</div>
+        <div style="font-size: 16px; font-weight: 600; color: ${s || extra ? 'var(--label)' : '#8E8A9C'}">${s?.custom ? `<span class="chip soft" style="height: 20px; font-size: 11px; padding: 0 7px; margin-right: 6px; vertical-align: 2px">Coach</span>` : ''}${s ? esc(s.name) : extra ? esc(extra.name) : state.skipped[dateKey(d)] ? 'Séance annulée' : moved ? 'Séance déplacée' : 'Repos'}</div>
         ${moved ? `<div class="foot">→ ${DAYS3[dayIdx(moved)].toLowerCase()} ${moved.getDate()}</div>` : ''}
         ${extra ? `<div class="foot">${extra.durationMin} min${extra.km ? ` · ${fmtNum(extra.km)} km` : ''}</div>` : ''}
         ${s && done ? (() => { const l = logsOn(d).slice(-1)[0]; return `<div class="foot">${[`${l.durationMin} min`, l.km ? `${fmtNum(l.km)} km` : '', l.speed ? `${fmtNum(l.speed)} km/h` : '', l.incline ? `${fmtNum(l.incline)} %` : ''].filter(Boolean).join(' · ')}</div>`; })()
@@ -692,7 +692,8 @@ function daySheet(dk) {
   // Actions d'abord, détail de la séance ensuite (replié pour les jours passés)
   return `<div class="row" style="justify-content: space-between; align-items: flex-start">
       <div class="row" style="gap: 10px"><div class="ico" style="background: ${icon[1]}">${ic(icon[0], 17, icon[2])}</div>
-      <div><div style="font-size: 20px; font-weight: 700">${esc(s.name)}</div><div class="sub">${DAYS[dayIdx(d)]} ${d.getDate()} · ${s.minutes} min${state.skipped[dk] ? ' · annulée' : ''}</div></div></div>
+      <div><div style="font-size: 20px; font-weight: 700">${esc(s.name)}</div><div class="sub">${DAYS[dayIdx(d)]} ${d.getDate()} · ${s.minutes} min${state.skipped[dk] ? ' · annulée' : ''}</div>
+      ${s.custom ? `<span class="chip soft" style="margin-top: 6px">${ic('coach', 13, 'var(--violet-text)')}Séance créée par le coach</span>` : ''}</div></div>
       <button class="x" data-act="close-sheet" aria-label="Fermer">${ic('close', 14, 'var(--sec)', 2.4)}</button>
     </div>
     ${done ? '<div class="chip soft" style="align-self: flex-start">Séance déjà enregistrée</div>' : ''}
