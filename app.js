@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v34';
+const APP_VERSION = 'v35';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -142,11 +142,16 @@ function sessionFor(d, slot = slotFor(d)) {
   if (def.kind === 'salle') {
     // Pause kiné : « haut du corps » devient une 2e séance jambes/fessiers, sans charge sur épaules et bras
     if (inRehab(d)) {
-      const v = slot.key === 'upper' ? 'R2' : 'R1';
+      // Pause kiné : les séances de salle de la semaine alternent Jambes 1 / Jambes 2 dans l'ordre des jours
+      const plan = weekPlan(d);
+      const rank = plan.slice(0, dayIdx(d)).filter((x) => x && !x.custom && SESSIONS[x.key]?.kind === 'salle').length;
+      const v = rank % 2 === 0 ? 'R1' : 'R2';
       const lower = SESSIONS.lower;
       return { ...base, key: slot.key, name: `${lower.name} ${v === 'R1' ? '1' : '2'}`, rehab: true, variant: v, minutes: 50, exercises: lower[v].map((id) => ({ id, sets: setsFor(week, EXERCISES[id]), load: plannedLoad(id, week) })) };
     }
-    const variant = variantFor(week);
+    // Deux séances du même type dans la semaine : la 2e prend l'autre variante (A/B)
+    const same = weekPlan(d).slice(0, dayIdx(d)).filter((x) => x && !x.custom && x.key === slot.key).length;
+    const variant = same % 2 === 0 ? variantFor(week) : (variantFor(week) === 'A' ? 'B' : 'A');
     return { ...base, variant, minutes: def.minutes, exercises: def[variant].map((id) => ({ id, sets: setsFor(week, EXERCISES[id]), load: plannedLoad(id, week) })) };
   }
   if (def.kind === 'course') {
