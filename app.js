@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v39';
+const APP_VERSION = 'v40';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -668,24 +668,28 @@ function daySheet(dk) {
   }
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const icon = kindIcon[s.kind] || kindIcon.douce;
+  const past = d < today;
+  const showDetail = !past || state.dayDetail === dk;
+  // Actions d'abord, détail de la séance ensuite (replié pour les jours passés)
   return `<div class="row" style="justify-content: space-between; align-items: flex-start">
       <div class="row" style="gap: 10px"><div class="ico" style="background: ${icon[1]}">${ic(icon[0], 17, icon[2])}</div>
-      <div><div style="font-size: 20px; font-weight: 700">${esc(s.name)}</div><div class="sub">${DAYS[dayIdx(d)]} ${d.getDate()} · ${s.minutes} min</div></div></div>
+      <div><div style="font-size: 20px; font-weight: 700">${esc(s.name)}</div><div class="sub">${DAYS[dayIdx(d)]} ${d.getDate()} · ${s.minutes} min${state.skipped[dk] ? ' · annulée' : ''}</div></div></div>
       <button class="x" data-act="close-sheet" aria-label="Fermer">${ic('close', 14, 'var(--sec)', 2.4)}</button>
     </div>
-    ${placePicker(s)}${optPicker(s)}
-    ${whySession(s)}
-    ${sessionPreview(s)}
-    ${dk === dateKey() && !done ? (s.exercises ? `<button class="btn p block" data-act="start" data-date="${dk}">${ic('play', 16, '#fff')}Commencer la séance</button>` : `<button class="btn p block" data-act="done-quick" data-date="${dk}">${ic('check', 16, '#fff', 2.6)}Séance faite</button>`) : ''}
-    ${!done && d <= today ? `<div class="stack" style="gap: 8px"><div class="foot" style="font-weight: 600">Tu l'as faite sans l'app ?</div>
-      <div class="grid2"><label class="stack" style="gap: 4px"><span class="foot">Durée (min)</span><input class="field" id="md-min" inputmode="numeric" placeholder="${s.minutes}"></label>
-      <label class="stack" style="gap: 4px"><span class="foot">${s.kind === 'course' ? 'Distance (km)' : 'FC moyenne'}</span><input class="field" id="md-x" inputmode="decimal" placeholder="—"></label></div>
-      <button class="btn t block" data-act="mark-done" data-date="${dk}">${ic('check', 16, 'var(--violet-text)', 2.6)}Marquer comme faite</button></div>` : ''}
+    ${done ? '<div class="chip soft" style="align-self: flex-start">Séance déjà enregistrée</div>' : ''}
+    ${dk === dateKey() && !done && !state.skipped[dk] ? (s.exercises ? `<button class="btn p block" data-act="start" data-date="${dk}">${ic('play', 16, '#fff')}Commencer la séance</button>` : `<button class="btn p block" data-act="done-quick" data-date="${dk}">${ic('check', 16, '#fff', 2.6)}Séance faite</button>`) : ''}
+    ${!done && past && !state.skipped[dk] ? `<button class="btn t block" data-act="md-open" data-date="${dk}">${ic('check', 16, 'var(--violet-text)', 2.6)}Marquer comme faite</button>
+      ${state.mdOpen === dk ? `<div class="stack" style="gap: 8px; background: var(--fill); border-radius: 12px; padding: 12px">
+        <div class="grid2"><label class="stack" style="gap: 4px"><span class="foot">Durée (min)</span><input class="field" id="md-min" inputmode="numeric" placeholder="${s.minutes}"></label>
+        <label class="stack" style="gap: 4px"><span class="foot">${s.kind === 'course' ? 'Distance (km)' : 'FC moyenne'}</span><input class="field" id="md-x" inputmode="decimal" placeholder="—"></label></div>
+        <button class="btn p block sm" data-act="mark-done" data-date="${dk}">Enregistrer</button></div>` : ''}` : ''}
     ${!done && !state.skipped[dk] ? `<button class="btn t block" data-act="move-sheet" data-date="${dk}">${ic('move', 16, 'var(--violet-text)')}Déplacer</button>` : ''}
     ${!done && !state.skipped[dk] ? `<button class="btn w block" data-act="skip" data-date="${dk}" style="color: var(--warn); box-shadow: inset 0 0 0 1px var(--sep)">Annuler cette séance</button>` : ''}
     ${state.skipped[dk] ? `<button class="btn t block" data-act="unskip" data-date="${dk}">Rétablir la séance</button>` : ''}
     ${!done && (slotFor(d)?.custom) ? `<button class="btn t block" data-act="reset-day" data-date="${dk}">${ic('refresh', 16, 'var(--violet-text)')}Revenir à la séance prévue</button>` : ''}
-    ${done ? '<div class="chip soft" style="align-self: flex-start">Séance déjà enregistrée</div>' : `<button class="link danger" data-act="remove-day" data-date="${dk}" style="font-size: 15px; align-self: center">${d > today ? 'Retirer de la semaine' : 'Supprimer du planning (n’était pas prévue)'}</button>`}`;
+    ${!done ? `<button class="btn w block" data-act="remove-day" data-date="${dk}" style="color: #C62F3C; box-shadow: inset 0 0 0 1px var(--sep)">${d > today ? 'Retirer de la semaine' : 'Supprimer du planning (n’était pas prévue)'}</button>` : ''}
+    ${showDetail ? `${placePicker(s)}${optPicker(s)}${whySession(s)}${sessionPreview(s)}`
+      : `<button class="link" data-act="day-detail" data-date="${dk}" style="font-size: 15px; align-self: center">Voir les exercices ${ic('chevR', 14, 'var(--violet-text)', 2.4)}</button>`}`;
 }
 
 function moveSession(dayFrom, dayTo, ref) {
@@ -1618,7 +1622,7 @@ const ACTIONS = {
     startSession(t.dataset.date);
   },
   resume: () => { state.view = 'workout'; render(); scrollTo(0, 0); },
-  preview: (t) => { state.sheet = { type: 'day', arg: t.dataset.date }; render(); },
+  preview: (t) => { state.mdOpen = null; state.dayDetail = null; state.sheet = { type: 'day', arg: t.dataset.date }; render(); },
   'run-place': (t) => { state.runPlace[t.dataset.date] = t.dataset.v; save('runPlace'); render(); },
   'opt-choice': (t) => { state.optChoice[t.dataset.date] = t.dataset.v; save('optChoice'); render(); },
   'sleep-coach': (t) => sleepCoach(t.dataset.key),
@@ -1632,6 +1636,8 @@ const ACTIONS = {
   },
   unskip: (t) => { delete state.skipped[t.dataset.date]; state.sheet = null; save('skipped'); render(); },
   'skip-empty': (t) => { state.skipped[t.dataset.date] = true; delete state.movedFrom[t.dataset.date]; state.sheet = null; save('skipped', 'movedFrom'); render(); toast('Séance indiquée comme annulée'); },
+  'md-open': (t) => { state.mdOpen = state.mdOpen === t.dataset.date ? null : t.dataset.date; render(); },
+  'day-detail': (t) => { state.dayDetail = t.dataset.date; render(); },
   'mark-done': (t) => {
     const dk = t.dataset.date;
     const s = sessionFor(parseKey(dk));
