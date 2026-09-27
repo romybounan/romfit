@@ -103,7 +103,7 @@ const RUN_TYPES = {
   fractionne: (n) => ({ name: 'Fractionné', place: 'dehors', km: 3.5, steps: [['Échauffement : 1 km très facile', 10], [`${n} × (1 min rapide + 1 min 30 en trottinant)`, Math.round(n * 2.5)], ['1 km facile', 10], ['Marche + étirements', 5]] }),
 };
 const RUN_PLAN = {
-  1: RUN_TYPES.lente(3), 2: RUN_TYPES.lente(3.5), 3: RUN_TYPES.progressive(4), 4: RUN_TYPES.fractionne(6),
+  1: RUN_TYPES.lente(3), 2: RUN_TYPES.lente(4), 3: RUN_TYPES.progressive(4), 4: RUN_TYPES.fractionne(6),
   // À partir de la semaine 5 : course rythmée du mercredi (la sortie longue est dans LONG_PLAN)
   5: RUN_TYPES.progressive(4), 6: RUN_TYPES.fractionne(6), 7: RUN_TYPES.lente(3.5), 8: RUN_TYPES.progressive(4.5),
   9: RUN_TYPES.fractionne(8), 10: RUN_TYPES.progressive(5), 11: RUN_TYPES.fractionne(8), 12: RUN_TYPES.lente(4),
@@ -112,7 +112,7 @@ const RUN_PLAN = {
 // Sortie longue du samedi : +0,5 à 1 km par semaine, semaines 7 et 12 plus légères → 10 km le samedi 26 décembre (semaine 14)
 const LONG_PLAN = { 5: 5, 6: 5.5, 7: 4.5, 8: 6, 9: 7, 10: 7.5, 11: 8.5, 12: 6.5, 13: 9, 14: 10, 15: 6 };
 const RUN_TIP = {
-  tapis: 'Sur tapis : mets 1 % d’inclinaison, ça reproduit l’effort dehors. Si ton cœur s’emballe, baisse la vitesse.',
+  tapis: 'Sur tapis : inclinaison à 1 % (ça reproduit l’effort dehors). Règle la vitesse sur ta fréquence cardiaque, pas l’inverse : si elle monte trop, baisse la vitesse ou marche 1 minute.',
   dehors: 'Dehors : choisis un parcours plutôt plat. Si ton cœur s’emballe, ralentis ou marche un peu, c’est normal.',
 };
 

@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v42';
+const APP_VERSION = 'v43';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -158,13 +158,29 @@ function sessionFor(d, slot = slotFor(d)) {
   if (def.kind === 'course') {
     const r = slot.key === 'long' ? RUN_TYPES.longue(LONG_PLAN[week] || 5) : RUN_PLAN[week];
     const place = state.runPlace[dk] || r.place;
-    const steps = r.steps.map(([label, min]) => ({ label, min }));
-    return { ...base, name: r.name, km: r.km, place, minutes: steps.reduce((n, x) => n + x.min, 0), steps, tip: RUN_TIP[place] };
+    const z = hrZone();
+    const slow = /lente|longue/i.test(r.name);
+    const steps = r.steps.map(([label, min], i) => {
+      let l = label;
+      if (i === 0 && place === 'tapis') l = 'Marche rapide sur le tapis, inclinaison 1 %';
+      if (i === 1 && slow && z) l += ` · FC entre ${z[0]} et ${z[1]} BPM`;
+      if (i === 1 && place === 'tapis' && slow) l += ' · baisse la vitesse dès que ta FC dépasse';
+      return { label: l, min };
+    });
+    const hr = slow && z ? ` Zone visée : ${z[0]}-${z[1]} BPM (estimation d’après ton âge, à ajuster à tes sensations : tu dois pouvoir parler).` : '';
+    return { ...base, name: r.name, km: r.km, place, minutes: steps.reduce((n, x) => n + x.min, 0), steps, tip: RUN_TIP[place] + hr };
   }
   // Séance optionnelle : l'activité choisie (vélo, marche inclinée, reformer)
   const choice = state.optChoice[dk];
   const c = OPTIONAL_CHOICES[choice];
   return { ...base, name: c ? c.label : def.name, choice: choice || null, minutes: c ? c.min : def.minutes, steps: c ? [{ label: c.label, min: c.min, text: c.text }] : [] };
+}
+
+function hrZone() {
+  const age = parseInt(state.settings.profile?.age, 10);
+  if (!age) return null;
+  const max = 220 - age;
+  return [Math.round(max * 0.6 / 5) * 5, Math.round(max * 0.75 / 5) * 5];
 }
 
 const inRehab = (d) => { const k = dateKey(d); return typeof REHAB !== 'undefined' && k >= REHAB.from && k <= REHAB.to; };
@@ -342,9 +358,10 @@ function nextSession(from) {
 // Tapis ou dehors (course)
 function placePicker(s) {
   if (s.kind !== 'course' || s.custom) return '';
-  return `<div class="seg" role="group" aria-label="Où cours-tu ?">
+  return `<div class="stack" style="gap: 8px"><div class="seg" role="group" aria-label="Où cours-tu ?">
     ${[['tapis', 'Sur tapis'], ['dehors', 'Dehors']].map(([v, l]) => `<button class="${s.place === v ? 'on' : ''}" data-act="run-place" data-date="${s.date}" data-v="${v}">${l}</button>`).join('')}
-  </div>`;
+  </div>
+  <div class="note" style="background: var(--run-soft)">${ic(s.place === 'tapis' ? 'run' : 'map', 16, 'var(--run)')}<span>${esc(s.tip)}</span></div></div>`;
 }
 
 // Vélo, marche inclinée ou reformer (séance optionnelle)

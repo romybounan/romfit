@@ -1,5 +1,9 @@
 // Vidéos de démonstration par des coachs femmes (YouTube) — chaque identifiant vérifié via oEmbed.
 const VIDEOS = {
+ "crunch-sol": {"videoId": "8Bf_WQYE30I", "title": "How To Do Crunches Without Neck Pain! - Crunches for Beginners", "author": "Jessica Valant"},
+ "reverse-crunch": {"videoId": "gAyTBB4lm3I", "title": "Reverse Crunch", "author": "LivestrongWoman"},
+ "hollow-hold": {"videoId": "6V85RU4eQ2w", "title": "Hollow Hold", "author": "Girls Gone Strong | Women's Health & Fitness"},
+ "russian-twist": {"videoId": "DF0sPfwys_g", "title": "How to Do Russian Twists Correctly", "author": "Get Healthy U - with Chris Freytag"},
  "presse-une-jambe": {"videoId": "aTgiRNwi7eY", "title": "Glute Focused Leg Press: How To", "author": "Hammer Fitness"},
  "mollets-assis": {"videoId": "iNfR5cnabZo", "title": "How to Do a Seated Calf Raise | Female Bodybuilding", "author": "Howcast"},
  "leg-extension": {"videoId": "3pOsjZGe10k", "title": "HOW TO USE THE LEG EXTENSION MACHINE | COACH KELLY CUES", "author": "Kelly Matthews"},
