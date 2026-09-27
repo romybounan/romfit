@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v35';
+const APP_VERSION = 'v36';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -1016,6 +1016,30 @@ function bars(values, labels, color, goal, maxV) {
   return out + '</svg>';
 }
 
+// Séances par semaine, empilées par type de sport, avec le nombre au-dessus
+const TYPE_COLORS = { salle: ['#6D4AE8', 'Salle'], course: ['#B23A86', 'Course'], douce: ['#B9A6FB', 'Activité douce'] };
+function sessionBars(weeks, logsOfWeek) {
+  const n = weeks.length, W = 310, H = 120, step = W / Math.max(n, 3), bw = Math.min(40, step * 0.55);
+  const counts = weeks.map((w) => { const c = { salle: 0, course: 0, douce: 0 }; logsOfWeek(w).forEach((l) => { c[TYPE_COLORS[l.kind] ? l.kind : 'douce']++; }); return c; });
+  const max = Math.max(4, ...counts.map((c) => c.salle + c.course + c.douce));
+  const unit = (H - 16) / max;
+  const gy = H - 3 * unit;
+  let o = `<svg width="100%" viewBox="0 0 ${W} ${H + 22}" aria-label="Séances par semaine">`;
+  o += `<line x1="0" x2="${W}" y1="${gy}" y2="${gy}" stroke="var(--violet)" stroke-dasharray="4 4" opacity=".45"/>`;
+  counts.forEach((c, i) => {
+    const x = i * step + (step - bw) / 2;
+    let y = H;
+    ['salle', 'course', 'douce'].forEach((k) => {
+      for (let j = 0; j < c[k]; j++) { y -= unit; o += `<rect x="${x}" y="${y + 1}" width="${bw}" height="${unit - 2}" rx="5" fill="${TYPE_COLORS[k][0]}"/>`; }
+    });
+    const total = c.salle + c.course + c.douce;
+    o += total ? `<text x="${x + bw / 2}" y="${y - 5}" text-anchor="middle" font-size="12" font-weight="700" fill="var(--label)">${total}</text>` : `<rect x="${x}" y="${H - 3}" width="${bw}" height="3" rx="1.5" fill="#E3DEEF"/>`;
+    const w = weeks[i];
+    o += `<text x="${x + bw / 2}" y="${H + 16}" text-anchor="middle" font-size="11" fill="${i === n - 1 ? 'var(--violet-text)' : 'var(--sec)'}" font-weight="${i === n - 1 ? 700 : 400}">${w.getDate()}/${w.getMonth() + 1}</text>`;
+  });
+  return o + '</svg>';
+}
+
 function lineChart(points, color, band) {
   if (!points.length) return '';
   const vals = points.map((p) => p.v);
@@ -1033,8 +1057,11 @@ function lineChart(points, color, band) {
 
 function viewProgress() {
   const ws = weekStart();
-  const weeks = Array.from({ length: 6 }, (_, i) => addDays(ws, -7 * (5 - i)));
-  const perWeek = weeks.map((w) => state.logs.filter((l) => { const t = parseKey(l.dateKey); return t >= w && t < addDays(w, 7); }).length);
+  // Semaines depuis le début du programme (6 au maximum)
+  const nW = Math.min(6, Math.max(1, Math.round((ws - START) / (7 * 864e5)) + 1));
+  const weeks = Array.from({ length: nW }, (_, i) => addDays(ws, -7 * (nW - 1 - i)));
+  const logsOfWeek = (w) => state.logs.filter((l) => { const t = parseKey(l.dateKey); return t >= w && t < addDays(w, 7); });
+  const perWeek = weeks.map((w) => logsOfWeek(w).length);
   const days = Array.from({ length: 7 }, (_, i) => addDays(new Date(), i - 6));
   const sleep = days.map((d) => (state.health[dateKey(d)]?.sleepMin || 0) / 60);
   const sleepKnown = sleep.filter(Boolean);
@@ -1074,9 +1101,13 @@ function viewProgress() {
   <h2 class="sec">Tendances</h2>
   <section class="card stack" style="gap: 6px">
     <div class="hdr" style="color: var(--violet-text)">${ic('flame', 16, 'var(--violet-text)')}Séances par semaine</div>
-    <div><span class="big">${perWeek[5]}</span><span class="unit"> cette semaine (bonus compris) · objectif 3</span></div>
-    <div class="foot">Chaque barre = une semaine, étiquetée par la date de son lundi.</div>
-    ${bars(perWeek, weeks.map((w) => `${w.getDate()}/${w.getMonth() + 1}`), 'var(--violet)', 3, 4)}
+    <div><span class="big">${perWeek[perWeek.length - 1]}</span><span class="unit"> cette semaine · objectif 3</span></div>
+    ${sessionBars(weeks, logsOfWeek)}
+    <div class="row" style="gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--sec)">
+      ${Object.entries(TYPE_COLORS).map(([k, [c, l]]) => `<span class="row" style="gap: 6px"><span style="width: 10px; height: 10px; border-radius: 3px; background: ${c}"></span>${l}</span>`).join('')}
+      <span class="row" style="gap: 6px"><span style="width: 14px; border-top: 2px dashed var(--violet); opacity: .6"></span>Objectif 3</span>
+    </div>
+    <div class="foot">Chaque barre = une semaine (date du lundi). Plus la barre est haute, plus tu as fait de séances.</div>
   </section>
 
   <section class="card stack" style="margin-top: 12px; gap: 6px">
@@ -1536,7 +1567,7 @@ function logSheet(id) {
   const f = (k, label, v, mode = 'decimal') => `<label class="stack" style="gap: 4px"><span class="foot">${label}</span><input class="field" id="lg-${k}" inputmode="${mode}" value="${v != null ? esc(fmtNum(v)) : ''}" placeholder="—"></label>`;
   return `<div class="row" style="justify-content: space-between"><div><div style="font-size: 20px; font-weight: 700">${esc(l.name)}</div><div class="sub">${fmtDay(parseKey(l.dateKey))}</div></div>
       <button class="x" data-act="close-sheet" aria-label="Fermer">${ic('close', 14, 'var(--sec)', 2.4)}</button></div>
-    <div class="grid2">${f('min', 'Durée (min)', l.durationMin, 'numeric')}${f('km', 'Distance (km)', l.km)}${f('hr', 'FC moyenne', l.watch?.hr, 'numeric')}${f('kcal', 'Calories actives', l.watch?.kcal, 'numeric')}${l.choice === 'marche' || l.speed || l.incline ? f('speed', 'Vitesse (km/h)', l.speed) + f('incline', 'Inclinaison (%)', l.incline) : ''}</div>
+    <div class="grid2">${f('min', 'Durée (min)', l.durationMin, 'numeric')}${f('km', 'Distance (km)', l.km)}${f('hr', 'FC moyenne', l.watch?.hr, 'numeric')}${f('kcal', 'Calories actives', l.watch?.kcal, 'numeric')}${l.kind !== 'salle' ? f('speed', 'Vitesse moy. (km/h)', l.speed) + f('incline', 'Inclinaison (%)', l.incline) : ''}</div>
     <button class="btn p block" data-act="save-log" data-id="${l.id}">Enregistrer</button>
     <button class="link danger" data-act="del-log" data-id="${l.id}" style="font-size: 15px; align-self: center">${state.confirmDel === l.id ? 'Confirmer la suppression' : 'Supprimer cette séance'}</button>`;
 }
