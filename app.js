@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v46';
+const APP_VERSION = 'v47';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -651,12 +651,17 @@ function sessionPreview(s) {
         const ex = EXERCISES[e.id];
         const t = thumb(e.id);
         const target = ex.unit === 'time' ? `${e.load} s` : `${ex.reps[0]}-${ex.reps[1]} reps${ex.perSide ? ' / côté' : ''}`;
-        const load = e.load != null && ex.unit !== 'time' ? ` · ${fmtNum(e.load)} kg${ex.perHand ? ' par haltère' : ''}` : ex.bodyweight ? ' · poids du corps' : '';
+        const load = ex.bodyweight ? ' · poids du corps' : '';
+        const kgInput = e.load != null && ex.unit !== 'time'
+          ? `<label class="row" style="gap: 6px; font-size: 13px; color: var(--sec)">Charge
+              <input data-load="${e.id}" inputmode="decimal" value="${fmtNum(state.loads[e.id] ?? ex.base)}" aria-label="Charge de ${esc(ex.name)}" style="width: 64px; height: 32px; border-radius: 8px; border: 1px solid #E3DEEF; background: #fff; text-align: center; font-size: 15px; font-weight: 700; color: var(--violet-text); outline: none">
+              kg${ex.perHand ? ' par haltère' : ''}</label>` : '';
         return `<div class="row" style="gap: 12px; align-items: flex-start; background: var(--fill); border-radius: 12px; padding: 10px">
           ${t ? `<button data-act="video" data-id="${VIDEOS[e.id].videoId}" aria-label="Voir la démo de ${esc(ex.name)}" style="position: relative; flex: none"><img src="${t}" alt="" style="width: 72px; height: 54px; border-radius: 8px; object-fit: cover"><span style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center">${ic('play', 18, '#fff')}</span></button>` : ''}
           <div class="grow stack" style="gap: 3px">
             <div style="font-size: 15px; font-weight: 700">${i + 1}. ${esc(ex.name)}</div>
             <div class="foot" style="color: var(--violet-text); font-weight: 600">${e.sets} × ${target}${load}</div>
+            ${kgInput}
             ${ex.benefit ? `<div class="row" style="gap: 6px; align-items: flex-start; font-size: 13px; line-height: 18px; color: var(--label)">${ic('sparkle', 14, 'var(--violet-text)')}<span>${esc(ex.benefit)}</span></div>` : ''}
             <div class="foot">${esc(ex.cue)}</div>
           </div>
@@ -1411,6 +1416,11 @@ function viewSettings() {
   <label class="list" style="display: block; margin-top: 12px"><div class="li"><span class="grow" style="font-size: 16px">Heure habituelle</span>
     <input type="time" data-act="default-hour" value="${esc(st.hour)}" style="border: 0; background: transparent; color: var(--violet-text); font-weight: 600"></div></label>
 
+  <h2 class="sec">Mes charges</h2>
+  <div class="foot" style="margin: -4px 4px 8px">Le poids de départ de chaque exercice. Modifie-le si tu changes de charge à la salle : tes prochaines séances partiront de là.</div>
+  <div class="list">${Object.entries(EXERCISES).filter(([, e]) => !e.bodyweight && e.unit !== 'time').map(([id, e]) => `<label class="li"><span class="grow" style="font-size: 15px">${esc(e.name)}${e.perHand ? '<div class="foot">par haltère</div>' : ''}</span>
+    <input data-load="${id}" inputmode="decimal" value="${fmtNum(state.loads[id] ?? e.base)}" aria-label="Charge de ${esc(e.name)}" style="width: 70px; height: 36px; border-radius: 8px; border: 1px solid #E3DEEF; text-align: center; font-size: 16px; font-weight: 700; color: var(--violet-text); outline: none"><span class="unit" style="width: 22px">kg</span></label>`).join('')}</div>
+
   <h2 class="sec">Mes retours sur l'app</h2>
   <section class="card stack">
     <div class="sub" style="color: var(--label)">Note tes idées au fil de l'eau, puis copie-les pour les envoyer à Claude.</div>
@@ -1807,6 +1817,11 @@ document.addEventListener('change', (e) => {
       if (v !== planned) { cur.changed = true; cur.newKg = fmtNum(v); state.loads[id] = v; save('loads'); }
       save('active'); render();
     }
+  }
+  if (t.dataset.load) {
+    const v = parseNum(t.value);
+    if (v != null && v >= 0 && v < 500) { state.loads[t.dataset.load] = v; save('loads'); toast(`${EXERCISES[t.dataset.load].name} : ${fmtNum(v)} kg ✓`); }
+    else t.value = fmtNum(state.loads[t.dataset.load] ?? EXERCISES[t.dataset.load].base);
   }
   if (t.dataset.act === 'hour') { state.hours[t.dataset.date] = t.value; save('hours'); render(); }
   if (t.dataset.act === 'default-hour') { state.settings.hour = t.value; save('settings'); }
