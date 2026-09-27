@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v40';
+const APP_VERSION = 'v41';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -536,7 +536,8 @@ function viewPlanning() {
         <div style="font-size: 16px; font-weight: 600; color: ${s || extra ? 'var(--label)' : '#8E8A9C'}">${s ? esc(s.name) : extra ? esc(extra.name) : state.skipped[dateKey(d)] ? 'Séance annulée' : moved ? 'Séance déplacée' : 'Repos'}</div>
         ${moved ? `<div class="foot">→ ${DAYS3[dayIdx(moved)].toLowerCase()} ${moved.getDate()}</div>` : ''}
         ${extra ? `<div class="foot">${extra.durationMin} min${extra.km ? ` · ${fmtNum(extra.km)} km` : ''}</div>` : ''}
-        ${s ? `<div class="foot">${s.kind === 'salle' ? `Salle · ${s.minutes} min` : s.kind === 'course' ? `${s.km ? fmtNum(s.km) + ' km · ' : ''}${s.place === 'tapis' ? 'Tapis' : 'Dehors'}` : s.choice ? `${s.minutes} min` : 'Vélo, marche inclinée ou reformer'}</div>` : ''}
+        ${s && done ? (() => { const l = logsOn(d).slice(-1)[0]; return `<div class="foot">${[`${l.durationMin} min`, l.km ? `${fmtNum(l.km)} km` : '', l.speed ? `${fmtNum(l.speed)} km/h` : '', l.incline ? `${fmtNum(l.incline)} %` : ''].filter(Boolean).join(' · ')}</div>`; })()
+          : s ? `<div class="foot">${s.kind === 'salle' ? `Salle · ${s.minutes} min` : s.kind === 'course' ? `${s.km ? fmtNum(s.km) + ' km · ' : ''}${s.place === 'tapis' ? 'Tapis' : 'Dehors'}` : s.choice ? `${s.minutes} min` : 'Vélo, marche inclinée ou reformer'}</div>` : ''}
       </button>
       ${right}
       ${canDrag ? `<span class="grip" data-grip="${i}" aria-label="Glisser pour changer de jour">${ic('grip', 18, '#B7B2C6')}</span>` : ''}
