@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v41';
+const APP_VERSION = 'v42';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -148,7 +148,7 @@ function sessionFor(d, slot = slotFor(d)) {
       const rank = plan.slice(0, dayIdx(d)).filter((x) => x && !x.custom && SESSIONS[x.key]?.kind === 'salle').length;
       const v = rank % 2 === 0 ? 'R1' : 'R2';
       const lower = SESSIONS.lower;
-      return { ...base, key: slot.key, name: `${lower.name} ${v === 'R1' ? '1' : '2'}`, rehab: true, variant: v, minutes: 50, exercises: lower[v].map((id) => ({ id, sets: setsFor(week, EXERCISES[id]), load: plannedLoad(id, week) })) };
+      return { ...base, key: slot.key, name: v === 'R1' ? 'Jambes & fessiers' : 'Jambes, fessiers & abdos', rehab: true, variant: v, minutes: v === 'R1' ? 55 : 60, exercises: lower[v].map((id) => ({ id, sets: setsFor(week, EXERCISES[id]), load: plannedLoad(id, week) })) };
     }
     // Deux séances du même type dans la semaine : la 2e prend l'autre variante (A/B)
     const same = weekPlan(d).slice(0, dayIdx(d)).filter((x) => x && !x.custom && x.key === slot.key).length;

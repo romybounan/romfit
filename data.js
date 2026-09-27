@@ -38,6 +38,10 @@ const EXERCISES = {
   'fentes-bulgares-pdc': { name: 'Fentes bulgares (poids du corps)', muscles: ['Fessiers', 'Cuisses'], unit: 'reps', reps: [10, 12], base: 0, inc: 0, bodyweight: true, perSide: true, cue: 'Pied arrière sur le banc, mains sur les hanches, buste légèrement penché en avant pour cibler les fessiers. Chaque jambe.', benefit: "Fessiers et cuisses, une jambe à la fois, sans rien porter : corrige les déséquilibres et imite l'appui de la course." },
   'mollets-assis':       { name: 'Mollets assis', muscles: ['Mollets'], unit: 'reps', reps: [12, 15], base: 20, inc: 5, cue: 'À la machine : avant des pieds sur la plateforme, genoux sous les coussins. Descends les talons au maximum, puis monte le plus haut possible et marque une pause. Sans machine : assise sur un banc, haltères simplement posés sur les genoux.', benefit: 'Mollets (soléaire) : ce sont eux qui encaissent chaque impact en course. Les renforcer aide à prévenir les douleurs aux tibias et au tendon d’Achille.' },
   'presse-une-jambe':    { name: 'Presse à une jambe', muscles: ['Fessiers', 'Cuisses'], unit: 'reps', reps: [10, 12], base: 20, inc: 5, perSide: true, cue: 'Un seul pied au centre-haut de la plateforme, l’autre posé au sol. Descends lentement, genou dans l’axe du pied, puis pousse dans le talon. Chaque jambe. Commence léger : un peu moins de la moitié de ta charge à deux jambes.', benefit: 'Cuisses et fessiers, une jambe à la fois, comme à chaque foulée : renforce l’appui de la course et corrige les déséquilibres entre la gauche et la droite.' },
+  'crunch-sol':          { name: 'Crunch au sol', muscles: ['Abdos'], unit: 'reps', reps: [15, 20], base: 0, inc: 0, bodyweight: true, cue: 'Allongée, genoux pliés, mains croisées sur la poitrine. Enroule le haut du dos en expirant, sans tirer sur la nuque, puis redescends lentement.', benefit: 'Grand droit (les « tablettes ») : un ventre plus ferme, sans aucun appui sur les épaules.' },
+  'reverse-crunch':      { name: 'Crunch inversé', muscles: ['Abdos'], unit: 'reps', reps: [12, 15], base: 0, inc: 0, bodyweight: true, cue: 'Allongée, bras le long du corps, genoux pliés à 90°. Ramène les genoux vers la poitrine en décollant le bassin du sol, puis redescends sans à-coup.', benefit: 'Bas du ventre : le muscle qui tient le bassin et soutient ta posture en course.' },
+  'hollow-hold':         { name: 'Hollow hold', muscles: ['Abdos'], unit: 'time', base: 20, inc: 5, cue: 'Allongée, bras le long du corps, bas du dos plaqué au sol. Décolle légèrement les épaules et les jambes tendues, et tiens la position. Plus facile : genoux pliés.', benefit: 'Gainage profond du ventre, sans appui sur les bras : un tronc solide pour courir et porter des charges.' },
+  'russian-twist':       { name: 'Russian twist', muscles: ['Abdos', 'Obliques'], unit: 'reps', reps: [16, 20], base: 0, inc: 0, bodyweight: true, cue: 'Assise, buste incliné en arrière, pieds au sol, mains jointes contre la poitrine (sans poids). Tourne le buste d’un côté puis de l’autre. Compte chaque côté.', benefit: 'Obliques : une taille plus dessinée et un tronc stable pendant la foulée.' },
   'gainage-lateral':     { name: 'Gainage latéral', muscles: ['Obliques'], unit: 'time', base: 20, inc: 5, perSide: true, cue: 'Sur l’avant-bras, hanches hautes, corps aligné. Chaque côté.', benefit: 'Obliques et moyen fessier : une taille gainée et des hanches stables en course.' },
 };
 
@@ -48,8 +52,9 @@ const SESSIONS = {
     A: ['hip-thrust', 'goblet-squat', 'rdl-halteres', 'fentes-bulgares', 'abduction-machine', 'tirage-horizontal'],
     B: ['hip-thrust', 'presse-cuisses', 'leg-curl', 'step-up', 'kickback-poulie', 'rowing-haltere'],
     // Pause kiné (épaules et bras au repos) : machines et poids du corps, rien à porter
-    R1: ['hip-thrust', 'presse-cuisses', 'leg-curl', 'abduction-machine', 'pont-unilateral', 'releve-jambes'],
-    R2: ['hip-thrust', 'leg-extension', 'presse-une-jambe', 'fentes-bulgares-pdc', 'kickback-poulie', 'releve-jambes'],
+    // 1re séance : jambes & fessiers + 2 abdos ; 2e séance : jambes & fessiers + 5 abdos (tous sans appui sur les bras)
+    R1: ['hip-thrust', 'presse-cuisses', 'leg-curl', 'abduction-machine', 'fentes-bulgares-pdc', 'releve-jambes', 'crunch-sol'],
+    R2: ['hip-thrust', 'leg-extension', 'presse-une-jambe', 'kickback-poulie', 'releve-jambes', 'crunch-sol', 'reverse-crunch', 'hollow-hold', 'russian-twist'],
   },
   upper: {
     name: 'Haut du corps & fessiers', kind: 'salle', minutes: 55,
