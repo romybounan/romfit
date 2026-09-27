@@ -52,9 +52,9 @@ const SESSIONS = {
     A: ['hip-thrust', 'goblet-squat', 'rdl-halteres', 'fentes-bulgares', 'abduction-machine', 'tirage-horizontal'],
     B: ['hip-thrust', 'presse-cuisses', 'leg-curl', 'step-up', 'kickback-poulie', 'rowing-haltere'],
     // Pause kiné (épaules et bras au repos) : machines et poids du corps, rien à porter
-    // 1re séance : jambes & fessiers + 2 abdos ; 2e séance : jambes & fessiers + 5 abdos (tous sans appui sur les bras)
-    R1: ['hip-thrust', 'presse-cuisses', 'leg-curl', 'abduction-machine', 'fentes-bulgares-pdc', 'releve-jambes', 'crunch-sol'],
-    R2: ['hip-thrust', 'leg-extension', 'presse-une-jambe', 'kickback-poulie', 'releve-jambes', 'crunch-sol', 'reverse-crunch', 'hollow-hold', 'russian-twist'],
+    // 1re séance : jambes & fessiers + mollets + 2 abdos ; 2e : jambes, fessiers, ischios + mollets + 2 abdos (sans appui sur les bras)
+    R1: ['hip-thrust', 'presse-cuisses', 'leg-curl', 'abduction-machine', 'fentes-bulgares-pdc', 'mollets-assis', 'releve-jambes', 'crunch-sol'],
+    R2: ['hip-thrust', 'leg-extension', 'presse-une-jambe', 'kickback-poulie', 'hyperextension', 'mollets-assis', 'reverse-crunch', 'hollow-hold'],
   },
   upper: {
     name: 'Haut du corps & fessiers', kind: 'salle', minutes: 55,
@@ -100,10 +100,12 @@ const RUN_TYPES = {
   lente: (d) => ({ name: 'Course lente', place: 'tapis', km: d, steps: [['Marche rapide pour t’échauffer', 5], [`${km(d)} km de course lente : tu dois pouvoir parler`, Math.round(d * 10)], ['Marche + étirements', 5]] }),
   progressive: (d) => ({ name: 'Course progressive', place: 'dehors', km: d, steps: [['Échauffement : marche rapide puis trot', 6], [`${km(Math.round(d * 0.4 * 2) / 2)} km facile`, Math.round(d * 0.4 * 10)], [`${km(Math.round(d * 0.35 * 2) / 2)} km un peu plus vite (tu peux encore dire quelques mots)`, Math.round(d * 0.35 * 9)], [`${km(Math.round(d * 0.25 * 2) / 2)} km soutenu (respiration forte mais contrôlée)`, Math.round(d * 0.25 * 8)], ['Marche + étirements', 5]] }),
   longue: (d) => ({ name: 'Sortie longue', place: 'dehors', km: d, steps: [['Marche rapide pour t’échauffer', 5], [`${km(d)} km très lents : tu dois pouvoir parler du début à la fin`, Math.round(d * 10.2)], ['Marche + étirements', 5]] }),
+  // Marche-course pilotée par la fréquence cardiaque (durée plutôt que distance)
+  marcheCourse: (min) => ({ name: 'Marche-course lente', place: 'tapis', km: null, hrRules: true, steps: [['Marche rapide pour t’échauffer (sans te tenir aux barres)', 5], [`Alterne 1 min de course très lente et 2 min de marche rapide. Marche dès que ta FC dépasse ~145, repars quand elle redescend sous ~130`, min - 10], ['Retour au calme : marche lente + étirements', 5]] }),
   fractionne: (n) => ({ name: 'Fractionné', place: 'dehors', km: 3.5, steps: [['Échauffement : 1 km très facile', 10], [`${n} × (1 min rapide + 1 min 30 en trottinant)`, Math.round(n * 2.5)], ['1 km facile', 10], ['Marche + étirements', 5]] }),
 };
 const RUN_PLAN = {
-  1: RUN_TYPES.lente(3), 2: RUN_TYPES.lente(4), 3: RUN_TYPES.progressive(4), 4: RUN_TYPES.fractionne(6),
+  1: RUN_TYPES.lente(3), 2: RUN_TYPES.marcheCourse(40), 3: RUN_TYPES.progressive(4), 4: RUN_TYPES.fractionne(6),
   // À partir de la semaine 5 : course rythmée du mercredi (la sortie longue est dans LONG_PLAN)
   5: RUN_TYPES.progressive(4), 6: RUN_TYPES.fractionne(6), 7: RUN_TYPES.lente(3.5), 8: RUN_TYPES.progressive(4.5),
   9: RUN_TYPES.fractionne(8), 10: RUN_TYPES.progressive(5), 11: RUN_TYPES.fractionne(8), 12: RUN_TYPES.lente(4),

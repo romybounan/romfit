@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v47';
+const APP_VERSION = 'v48';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -160,7 +160,7 @@ function sessionFor(d, slot = slotFor(d)) {
     const r = slot.key === 'long' ? RUN_TYPES.longue(LONG_PLAN[week] || 5) : RUN_PLAN[week];
     const place = state.runPlace[dk] || r.place;
     const z = hrZone();
-    const slow = /lente|longue/i.test(r.name);
+    const slow = /lente|longue/i.test(r.name) && !r.hrRules;
     const steps = r.steps.map(([label, min], i) => {
       let l = label;
       if (i === 0 && place === 'tapis') l = 'Marche rapide sur le tapis, inclinaison 1 %';
@@ -168,7 +168,9 @@ function sessionFor(d, slot = slotFor(d)) {
       if (i === 1 && place === 'tapis' && slow) l += ' · baisse la vitesse dès que ta FC dépasse';
       return { label: l, min };
     });
-    const hr = slow && z ? ` Zone visée : ${z[0]}-${z[1]} BPM (estimation d’après ton âge, à ajuster à tes sensations : tu dois pouvoir parler).` : '';
+    const hr = r.hrRules
+      ? ' Le vrai repère : pouvoir parler en phrases complètes. Les seuils de 145 / 130 BPM sont des repères de coach, pas des valeurs exactes. Une montre au poignet peut surestimer la FC (une ceinture cardio est plus fiable), et le lendemain d’une séance jambes elle sera un peu plus haute : ne force pas. Peu importe la distance parcourue.'
+      : slow && z ? ` Zone visée : ${z[0]}-${z[1]} BPM (estimation d’après ton âge, à ajuster à tes sensations : tu dois pouvoir parler).` : '';
     return { ...base, name: r.name, km: r.km, place, minutes: steps.reduce((n, x) => n + x.min, 0), steps, tip: RUN_TIP[place] + hr };
   }
   // Séance optionnelle : l'activité choisie (vélo, marche inclinée, reformer)
@@ -388,10 +390,11 @@ function whySession(s) {
     if (has('Dos') || has('Épaules') || has('Biceps') || has('Triceps')) out.push('Haut du corps : dos et bras toniques, une posture plus droite, et l’équilibre avec le travail des jambes.');
     if (s.rehab) out.push('Rien pour les épaules et les bras : ils récupèrent pendant ta kiné.');
   } else if (s.kind === 'course') {
-    const t = { 'Sortie longue': 'C’est elle qui te mène aux 10 km : semaine après semaine, ton endurance et la résistance de tes jambes augmentent.', 'Course lente': 'Endurance de base : ton cœur apprend à travailler sans s’emballer, et tes jambes s’habituent à l’impact en douceur.', 'Course progressive': 'Apprendre à accélérer en fin de sortie : plus de cardio et d’aisance, sans te mettre dans le rouge dès le début.', 'Fractionné': 'Des pointes de vitesse courtes : ton cardio progresse vite et tes jambes deviennent plus toniques.' };
+    const t = { 'Marche-course lente': 'Tu apprends à ton cœur à travailler sans s’emballer : la marche fait redescendre la FC, les minutes de course la font monter doucement. C’est la base pour courir plus longtemps ensuite.', 'Sortie longue': 'C’est elle qui te mène aux 10 km : semaine après semaine, ton endurance et la résistance de tes jambes augmentent.', 'Course lente': 'Endurance de base : ton cœur apprend à travailler sans s’emballer, et tes jambes s’habituent à l’impact en douceur.', 'Course progressive': 'Apprendre à accélérer en fin de sortie : plus de cardio et d’aisance, sans te mettre dans le rouge dès le début.', 'Fractionné': 'Des pointes de vitesse courtes : ton cardio progresse vite et tes jambes deviennent plus toniques.' };
     out.push(t[s.name] || 'Cardio et endurance : ta forme générale progresse séance après séance.');
     out.push('La course fait aussi travailler fessiers, mollets et cuisses à chaque foulée, en complément de la muscu.');
     if (s.km) out.push(`Objectif du jour : ${fmtNum(s.km)} km, pour progresser un peu chaque semaine.`);
+    else out.push(`Objectif du jour : ${s.minutes} min au total, la distance n’a pas d’importance.`);
   } else if (s.optional) {
     const t = {
       velo: ['Cardio sans impact : tu entretiens ton endurance tout en laissant tes articulations récupérer.', 'Travaille aussi les cuisses et les fessiers en douceur.'],
