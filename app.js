@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v36';
+const APP_VERSION = 'v37';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -12,7 +12,7 @@ const store = {
   },
 };
 
-const KEYS = ['settings', 'loads', 'logs', 'plan', 'hours', 'health', 'weights', 'chat', 'reviews', 'feedback', 'active', 'runPlace', 'optChoice', 'sleepNotes', 'skipped'];
+const KEYS = ['settings', 'loads', 'logs', 'plan', 'hours', 'health', 'weights', 'chat', 'reviews', 'feedback', 'active', 'runPlace', 'optChoice', 'sleepNotes', 'skipped', 'movedFrom'];
 const state = {
   settings: store.get('settings', { name: '', week: DEFAULT_WEEK, hour: '12:30', apiKey: '', model: '', zone: null, profile: {} }),
   loads: store.get('loads', {}),        // charge de travail actuelle par exercice
@@ -29,6 +29,7 @@ const state = {
   optChoice: store.get('optChoice', {}), // vélo / marche inclinée / reformer, par jour
   sleepNotes: store.get('sleepNotes', {}), // analyses du sommeil par le coach
   skipped: store.get('skipped', {}),     // séances annulées (par jour)
+  movedFrom: store.get('movedFrom', {}), // jour d'origine → nouveau jour d'une séance déplacée
   view: 'today', weekOffset: 0, sheet: null, video: null, rest: null, chartEx: 'hip-thrust', mealsOpen: false, busy: false,
 };
 const save = (...keys) => (keys.length ? keys : KEYS).forEach((k) => store.set(k, state[k]));
@@ -523,14 +524,17 @@ function viewPlanning() {
     else if (s && isToday) right = `<span class="chip solid">Aujourd'hui</span>`;
     else if (s && s.optional) right = `<span class="chip dashed">Optionnelle</span>`;
     else if (!s && done) right = `<span class="chip soft">${ic('check', 14, 'var(--violet-text)', 2.6)}Fait</span>`;
+    else if (!s && state.skipped[dateKey(d)]) right = `<span class="chip grey">Annulée</span>`;
+    const moved = !s && !done && !state.skipped[dateKey(d)] && state.movedFrom[dateKey(d)] ? parseKey(state.movedFrom[dateKey(d)]) : null;
     const extra = !s && done ? logsOn(d).slice(-1)[0] : null;
     const icon = s ? (kindIcon[s.kind] || kindIcon.douce) : extra ? (kindIcon[extra.kind] || kindIcon.douce) : ['moon', '#F1EEF7', '#8E8A9C'];
     const canDrag = s && !done && !past;
     return `<div class="dayrow" data-day="${i}" ${s && !done ? 'data-drop="1"' : 'data-drop="1"'}>
       <div class="d"><div class="foot" style="font-weight: 600">${dn}</div><div style="font-size: 20px; font-weight: 700">${d.getDate()}</div></div>
       <div class="ico" style="background: ${icon[1]}">${ic(icon[0], 17, icon[2])}</div>
-      <button class="grow" style="text-align: left; min-width: 0" ${done ? `data-act="log-detail" data-id="${logsOn(d).slice(-1)[0].id}"` : s ? `data-act="preview" data-date="${dateKey(d)}"` : ''}>
-        <div style="font-size: 16px; font-weight: 600; color: ${s || extra ? 'var(--label)' : '#8E8A9C'}">${s ? esc(s.name) : extra ? esc(extra.name) : 'Repos'}</div>
+      <button class="grow" style="text-align: left; min-width: 0" ${done ? `data-act="log-detail" data-id="${logsOn(d).slice(-1)[0].id}"` : `data-act="preview" data-date="${dateKey(d)}"`}>
+        <div style="font-size: 16px; font-weight: 600; color: ${s || extra ? 'var(--label)' : '#8E8A9C'}">${s ? esc(s.name) : extra ? esc(extra.name) : state.skipped[dateKey(d)] ? 'Séance annulée' : moved ? 'Séance déplacée' : 'Repos'}</div>
+        ${moved ? `<div class="foot">→ ${DAYS3[dayIdx(moved)].toLowerCase()} ${moved.getDate()}</div>` : ''}
         ${extra ? `<div class="foot">${extra.durationMin} min${extra.km ? ` · ${fmtNum(extra.km)} km` : ''}</div>` : ''}
         ${s ? `<div class="foot">${s.kind === 'salle' ? `Salle · ${s.minutes} min` : s.kind === 'course' ? `${s.km ? fmtNum(s.km) + ' km · ' : ''}${s.place === 'tapis' ? 'Tapis' : 'Dehors'}` : s.choice ? `${s.minutes} min` : 'Vélo, marche inclinée ou reformer'}</div>` : ''}
       </button>
@@ -586,6 +590,7 @@ function moveSheet(fromKey) {
 // Déplace une séance vers n'importe quel jour (même semaine ou autre semaine)
 function moveSessionTo(fromKey, toKey) {
   const from = parseKey(fromKey), to = parseKey(toKey);
+  if (slotFor(from) && !slotFor(to)) { state.movedFrom[fromKey] = toKey; delete state.movedFrom[toKey]; save('movedFrom'); }
   if (wkKey(from) === wkKey(to)) return moveSession(dayIdx(from), dayIdx(to), from);
   const pf = weekPlan(from).slice(), pt = weekPlan(to).slice();
   const a = pf[dayIdx(from)], b = pt[dayIdx(to)];
@@ -653,6 +658,14 @@ function daySheet(dk) {
   const d = parseKey(dk);
   const s = sessionFor(d);
   const done = doneOn(d);
+  if (!s) {
+    return `<div class="row" style="justify-content: space-between"><div><div style="font-size: 20px; font-weight: 700">${state.skipped[dk] ? 'Séance annulée' : 'Jour de repos'}</div><div class="sub">${DAYS[dayIdx(d)]} ${d.getDate()}</div></div>
+      <button class="x" data-act="close-sheet" aria-label="Fermer">${ic('close', 14, 'var(--sec)', 2.4)}</button></div>
+      ${state.skipped[dk]
+        ? `<button class="btn t block" data-act="unskip" data-date="${dk}">Retirer l’annulation</button>`
+        : `<div class="sub" style="color: var(--label)">Tu avais une séance prévue ce jour-là et tu ne l’as pas faite ?</div>
+           <button class="btn w block" data-act="skip-empty" data-date="${dk}" style="color: var(--warn); box-shadow: inset 0 0 0 1px var(--sep)">Indiquer une séance annulée</button>`}`;
+  }
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const icon = kindIcon[s.kind] || kindIcon.douce;
   return `<div class="row" style="justify-content: space-between; align-items: flex-start">
@@ -672,7 +685,7 @@ function daySheet(dk) {
     ${!done && !state.skipped[dk] ? `<button class="btn w block" data-act="skip" data-date="${dk}" style="color: var(--warn); box-shadow: inset 0 0 0 1px var(--sep)">${state.confirmSkip === dk ? 'Confirmer : séance annulée' : 'Annuler cette séance'}</button>` : ''}
     ${state.skipped[dk] ? `<button class="btn t block" data-act="unskip" data-date="${dk}">Rétablir la séance</button>` : ''}
     ${!done && (slotFor(d)?.custom) ? `<button class="btn t block" data-act="reset-day" data-date="${dk}">${ic('refresh', 16, 'var(--violet-text)')}Revenir à la séance prévue</button>` : ''}
-    ${!done ? `<button class="btn w block" data-act="remove-day" data-date="${dk}" style="color: #C62F3C; box-shadow: inset 0 0 0 1px var(--sep)">Retirer de la semaine</button>` : '<div class="chip soft" style="align-self: flex-start">Séance déjà enregistrée</div>'}`;
+    ${done ? '<div class="chip soft" style="align-self: flex-start">Séance déjà enregistrée</div>' : d > today ? `<button class="btn w block" data-act="remove-day" data-date="${dk}" style="color: #C62F3C; box-shadow: inset 0 0 0 1px var(--sep)">Retirer de la semaine</button>` : ''}`;
 }
 
 function moveSession(dayFrom, dayTo, ref) {
@@ -1613,7 +1626,8 @@ const ACTIONS = {
     if (state.confirmSkip !== dk) { state.confirmSkip = dk; render(); return; }
     state.skipped[dk] = true; state.confirmSkip = null; state.sheet = null; save('skipped'); render(); toast('Séance annulée');
   },
-  unskip: (t) => { delete state.skipped[t.dataset.date]; save('skipped'); render(); },
+  unskip: (t) => { delete state.skipped[t.dataset.date]; state.sheet = null; save('skipped'); render(); },
+  'skip-empty': (t) => { state.skipped[t.dataset.date] = true; delete state.movedFrom[t.dataset.date]; state.sheet = null; save('skipped', 'movedFrom'); render(); toast('Séance indiquée comme annulée'); },
   'mark-done': (t) => {
     const dk = t.dataset.date;
     const s = sessionFor(parseKey(dk));
