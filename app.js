@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v38';
+const APP_VERSION = 'v39';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -422,7 +422,7 @@ function sessionCard(s, d) {
       </div>
       <div class="row" style="justify-content: center; gap: 22px; margin-top: 2px">
         <button class="link" data-act="move-sheet" data-date="${dateKey(d)}" style="font-size: 15px">${ic('move', 15, 'var(--violet-text)')}Déplacer</button>
-        <button class="link danger" data-act="skip" data-date="${dateKey(d)}" style="font-size: 15px">${state.confirmSkip === dateKey(d) ? 'Confirmer l’annulation' : 'Annuler'}</button>
+        <button class="link danger" data-act="skip" data-date="${dateKey(d)}" style="font-size: 15px">Annuler</button>
       </div>`}
     </div>
   </section>`;
@@ -520,7 +520,7 @@ function viewPlanning() {
     let right = '';
     if (s && done) right = `<span class="chip soft">${ic('check', 14, 'var(--violet-text)', 2.6)}Fait</span>`;
     else if (s && state.skipped[dateKey(d)]) right = `<span class="chip grey">Annulée</span>`;
-    else if (s && past && !s.optional && dateKey(d) >= state.settings.since) right = `<button class="chip warn" data-act="move-sheet" data-date="${dateKey(d)}">${ic('move', 14, 'var(--warn)')}Déplacer</button>`;
+    else if (s && past && !s.optional && dateKey(d) >= state.settings.since) right = `<button class="chip warn" data-act="preview" data-date="${dateKey(d)}">Manquée</button>`;
     else if (s && isToday) right = `<span class="chip solid">Aujourd'hui</span>`;
     else if (s && s.optional) right = `<span class="chip dashed">Optionnelle</span>`;
     else if (!s && done) right = `<span class="chip soft">${ic('check', 14, 'var(--violet-text)', 2.6)}Fait</span>`;
@@ -681,11 +681,11 @@ function daySheet(dk) {
       <div class="grid2"><label class="stack" style="gap: 4px"><span class="foot">Durée (min)</span><input class="field" id="md-min" inputmode="numeric" placeholder="${s.minutes}"></label>
       <label class="stack" style="gap: 4px"><span class="foot">${s.kind === 'course' ? 'Distance (km)' : 'FC moyenne'}</span><input class="field" id="md-x" inputmode="decimal" placeholder="—"></label></div>
       <button class="btn t block" data-act="mark-done" data-date="${dk}">${ic('check', 16, 'var(--violet-text)', 2.6)}Marquer comme faite</button></div>` : ''}
-    ${!done && d >= today ? `<button class="btn t block" data-act="move-sheet" data-date="${dk}">${ic('move', 16, 'var(--violet-text)')}Déplacer</button>` : ''}
-    ${!done && !state.skipped[dk] ? `<button class="btn w block" data-act="skip" data-date="${dk}" style="color: var(--warn); box-shadow: inset 0 0 0 1px var(--sep)">${state.confirmSkip === dk ? 'Confirmer : séance annulée' : 'Annuler cette séance'}</button>` : ''}
+    ${!done && !state.skipped[dk] ? `<button class="btn t block" data-act="move-sheet" data-date="${dk}">${ic('move', 16, 'var(--violet-text)')}Déplacer</button>` : ''}
+    ${!done && !state.skipped[dk] ? `<button class="btn w block" data-act="skip" data-date="${dk}" style="color: var(--warn); box-shadow: inset 0 0 0 1px var(--sep)">Annuler cette séance</button>` : ''}
     ${state.skipped[dk] ? `<button class="btn t block" data-act="unskip" data-date="${dk}">Rétablir la séance</button>` : ''}
     ${!done && (slotFor(d)?.custom) ? `<button class="btn t block" data-act="reset-day" data-date="${dk}">${ic('refresh', 16, 'var(--violet-text)')}Revenir à la séance prévue</button>` : ''}
-    ${done ? '<div class="chip soft" style="align-self: flex-start">Séance déjà enregistrée</div>' : d > today ? `<button class="btn w block" data-act="remove-day" data-date="${dk}" style="color: #C62F3C; box-shadow: inset 0 0 0 1px var(--sep)">Retirer de la semaine</button>` : ''}`;
+    ${done ? '<div class="chip soft" style="align-self: flex-start">Séance déjà enregistrée</div>' : `<button class="link danger" data-act="remove-day" data-date="${dk}" style="font-size: 15px; align-self: center">${d > today ? 'Retirer de la semaine' : 'Supprimer du planning (n’était pas prévue)'}</button>`}`;
 }
 
 function moveSession(dayFrom, dayTo, ref) {
@@ -1628,8 +1628,7 @@ const ACTIONS = {
   'abandon-quick': () => { state.active = null; save('active'); state.view = 'today'; render(); },
   skip: (t) => {
     const dk = t.dataset.date;
-    if (state.confirmSkip !== dk) { state.confirmSkip = dk; render(); return; }
-    state.skipped[dk] = true; state.confirmSkip = null; state.sheet = null; save('skipped'); render(); toast('Séance annulée');
+    state.skipped[dk] = true; state.sheet = null; save('skipped'); render(); toast('Séance annulée · tu peux la rétablir');
   },
   unskip: (t) => { delete state.skipped[t.dataset.date]; state.sheet = null; save('skipped'); render(); },
   'skip-empty': (t) => { state.skipped[t.dataset.date] = true; delete state.movedFrom[t.dataset.date]; state.sheet = null; save('skipped', 'movedFrom'); render(); toast('Séance indiquée comme annulée'); },
