@@ -6,6 +6,7 @@ N=$(( $(sed -n "s/.*\"v\":\"v\([0-9]*\)\".*/\1/p" version.json) + 1 ))
 sed -i '' "s/const APP_VERSION = 'v[0-9]*';/const APP_VERSION = 'v$N';/" app.js
 sed -i '' "s/const VERSION = 'romfit-v[0-9]*';/const VERSION = 'romfit-v$N';/" sw.js
 printf '{"v":"v%s"}\n' "$N" > version.json
+sed -i '' -E "s/\.js\?v=[0-9]+\"/.js?v=$N\"/g" index.html
 git add -A
 git -c user.name="Romy" -c user.email="romybounan95@gmail.com" commit -q -m "$1
 

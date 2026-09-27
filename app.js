@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v43';
+const APP_VERSION = 'v44';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -1363,6 +1363,7 @@ function viewSettings() {
   return `
   <button class="link" data-act="tab" data-v="today" style="margin: -6px -6px 0">${ic('chevL', 22, 'var(--violet-text)', 2.4)}Aujourd'hui</button>
   <h1 class="lt" style="margin-top: 8px">Réglages</h1>
+  <div class="foot" style="margin: 2px 4px 0">Version de l'app : <b>${APP_VERSION}</b></div>
 
   <h2 class="sec">Mon profil</h2>
   <section class="card stack">
@@ -1874,9 +1875,13 @@ document.addEventListener('touchend', () => {
 });
 
 // ─────────────────────────── Mises à jour
+// Mise à jour forcée : on supprime la copie hors ligne (service worker + cache) puis on recharge.
+// Les données de l'app (localStorage) ne sont pas touchées.
 async function hardReload() {
-  try { const r = await navigator.serviceWorker?.getRegistration(); await r?.update(); } catch {}
-  location.reload();
+  toast('Mise à jour…');
+  try { for (const r of (await navigator.serviceWorker?.getRegistrations()) || []) await r.unregister(); } catch {}
+  try { for (const k of await caches.keys()) await caches.delete(k); } catch {}
+  location.replace(location.pathname + '?v=' + Date.now());
 }
 async function checkUpdate() {
   try {
