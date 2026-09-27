@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v33';
+const APP_VERSION = 'v34';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -12,7 +12,7 @@ const store = {
   },
 };
 
-const KEYS = ['settings', 'loads', 'logs', 'plan', 'hours', 'health', 'weights', 'chat', 'reviews', 'feedback', 'active', 'runPlace', 'optChoice', 'sleepNotes'];
+const KEYS = ['settings', 'loads', 'logs', 'plan', 'hours', 'health', 'weights', 'chat', 'reviews', 'feedback', 'active', 'runPlace', 'optChoice', 'sleepNotes', 'skipped'];
 const state = {
   settings: store.get('settings', { name: '', week: DEFAULT_WEEK, hour: '12:30', apiKey: '', model: '', zone: null, profile: {} }),
   loads: store.get('loads', {}),        // charge de travail actuelle par exercice
@@ -28,6 +28,7 @@ const state = {
   runPlace: store.get('runPlace', {}),  // tapis ou dehors, par jour
   optChoice: store.get('optChoice', {}), // vélo / marche inclinée / reformer, par jour
   sleepNotes: store.get('sleepNotes', {}), // analyses du sommeil par le coach
+  skipped: store.get('skipped', {}),     // séances annulées (par jour)
   view: 'today', weekOffset: 0, sheet: null, video: null, rest: null, chartEx: 'hip-thrust', mealsOpen: false, busy: false,
 };
 const save = (...keys) => (keys.length ? keys : KEYS).forEach((k) => store.set(k, state[k]));
@@ -180,7 +181,9 @@ function weekStats(d = new Date()) {
   const ws = weekStart(d);
   const logs = state.logs.filter((l) => { const t = parseKey(l.dateKey); return t >= ws && t < addDays(ws, 7); });
   const main = Math.min(3, logs.filter((l) => !l.optional).length);
-  return { main, optional: logs.some((l) => l.optional), logs };
+  const bonus = logs.filter((l) => l.optional).length;
+  const skipped = Object.keys(state.skipped || {}).filter((k) => { const t = parseKey(k); return state.skipped[k] && t >= ws && t < addDays(ws, 7); }).length;
+  return { main, bonus, total: logs.length, optional: bonus > 0, skipped, logs };
 }
 
 // Progression : +1 palier quand toutes les répétitions sont réussies (sauf si la charge a été changée pendant la séance)
@@ -276,29 +279,16 @@ function viewToday() {
     </section>`;
   } else if (done) {
     const log = logsOn(now).slice(-1)[0];
-    main = kudosCard(log, stats);
+    main = kudosCard(log, stats) + weekCard(stats);
   } else if (s) {
     main = `
-    <section class="card" style="margin-top: 18px; display: flex; align-items: center; gap: 18px; padding: 16px">
-      ${ringSvg(stats.main, stats.optional)}
-      <div class="stack grow" style="gap: 6px">
-        <div class="hdr" style="color: var(--violet-text)">${ic('flame', 16, 'var(--violet-text)')}Cette semaine</div>
-        <div><span class="big">${stats.main}</span><span class="unit"> sur 3 séances</span></div>
-        <div class="foot">${stats.main >= 3 ? 'Semaine parfaite ! La 4e est un bonus.' : "+ 1 séance optionnelle si tu as l'énergie"}</div>
-      </div>
-    </section>
+    ${weekCard(stats)}
     <h2 class="sec">Séance du jour</h2>
     ${sessionCard(s, now)}`;
   } else {
     const next = nextSession(now);
     main = `
-    <section class="card" style="margin-top: 18px; display: flex; align-items: center; gap: 18px; padding: 16px">
-      ${ringSvg(stats.main, stats.optional)}
-      <div class="stack grow" style="gap: 6px">
-        <div class="hdr" style="color: var(--violet-text)">${ic('flame', 16, 'var(--violet-text)')}Cette semaine</div>
-        <div><span class="big">${stats.main}</span><span class="unit"> sur 3 séances</span></div>
-      </div>
-    </section>
+    ${weekCard(stats)}
     <h2 class="sec">Jour de repos</h2>
     <section class="card stack">
       <div class="row"><div class="ico" style="background: #F1EEF7">${ic('moon', 17, 'var(--sec)')}</div>
@@ -320,6 +310,18 @@ function viewToday() {
   ${main}
   ${healthTiles(now)}
   ${mealsCard(now, s, done)}`;
+}
+
+function weekCard(stats) {
+  const detail = [`${stats.main} prioritaire${stats.main > 1 ? 's' : ''} sur 3`, stats.bonus ? `${stats.bonus} bonus` : '', stats.skipped ? `${stats.skipped} annulée${stats.skipped > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ');
+  return `<section class="card" style="margin-top: 18px; display: flex; align-items: center; gap: 18px; padding: 16px">
+      ${ringSvg(stats.main, stats.optional)}
+      <div class="stack grow" style="gap: 6px">
+        <div class="hdr" style="color: var(--violet-text)">${ic('flame', 16, 'var(--violet-text)')}Cette semaine</div>
+        <div><span class="big">${stats.total}</span><span class="unit"> séance${stats.total > 1 ? 's' : ''}</span></div>
+        <div class="foot">${detail}</div>
+      </div>
+    </section>`;
 }
 
 function nextSession(from) {
@@ -405,10 +407,17 @@ function sessionCard(s, d) {
         ${ic('clock', 18, 'var(--violet-text)')}<span class="grow">Prévue à</span>
         <input type="time" value="${esc(hour)}" data-act="hour" data-date="${dateKey(d)}" aria-label="Heure prévue" style="border: 0; background: transparent; font-weight: 600; color: var(--violet-text); font-size: 15px; text-align: right">
       </label>
+      ${state.skipped[dateKey(d)] ? `<div class="note" style="background: var(--warn-soft)">${ic('close', 16, 'var(--warn)', 2.4)}<span class="grow">Séance annulée.</span><button class="link" data-act="unskip" data-date="${dateKey(d)}" style="font-size: 14px; font-weight: 600">Rétablir</button></div>` : `
       <div class="grid2" style="gap: 10px; margin-top: 4px">
-        <button class="btn p" data-act="start" data-date="${dateKey(d)}">${ic('play', 16, '#fff')}Commencer</button>
+        ${s.exercises
+          ? `<button class="btn p" data-act="start" data-date="${dateKey(d)}">${ic('play', 16, '#fff')}Commencer</button>`
+          : `<button class="btn p" data-act="done-quick" data-date="${dateKey(d)}">${ic('check', 16, '#fff', 2.6)}Séance faite</button>`}
         <button class="btn t" data-act="other-sport">${ic('swap', 18, 'var(--violet-text)')}Autre sport</button>
       </div>
+      <div class="row" style="justify-content: center; gap: 22px; margin-top: 2px">
+        <button class="link" data-act="move-sheet" data-date="${dateKey(d)}" style="font-size: 15px">${ic('move', 15, 'var(--violet-text)')}Déplacer</button>
+        <button class="link danger" data-act="skip" data-date="${dateKey(d)}" style="font-size: 15px">${state.confirmSkip === dateKey(d) ? 'Confirmer l’annulation' : 'Annuler'}</button>
+      </div>`}
     </div>
   </section>`;
 }
@@ -418,12 +427,12 @@ function kudosCard(log, stats) {
   const conf = bits.map(([x, y, w, h, r, c], i) => `<div class="cf" style="left: ${x}px; top: ${y}px; width: ${w}px; height: ${h}px; border-radius: ${w === h ? '50%' : '2px'}; background: ${c}; transform: rotate(${r}deg); animation-delay: ${i * 0.2}s"></div>`).join('');
   const perfect = stats.main >= 3;
   const msgs = perfect
-    ? ['3 séances sur 3 : ta semaine est parfaite.', 'Tes fessiers et tes jambes se renforcent séance après séance.']
-    : [`${stats.main} séance${stats.main > 1 ? 's' : ''} sur 3 cette semaine.`, log.kind === 'course' ? 'Chaque sortie lente construit ton endurance.' : 'Chaque séance compte, continue comme ça.'];
+    ? [`${stats.total} séances cette semaine, dont les 3 prioritaires : ta semaine est parfaite.`, 'Tes fessiers et tes jambes se renforcent séance après séance.']
+    : [`${stats.total}${stats.total > 1 ? 'e' : 're'} séance de la semaine${log.optional ? ' (bonus)' : ''}.`, log.kind === 'course' ? 'Chaque sortie construit ton endurance.' : 'Chaque séance compte, continue comme ça.'];
   const sets = (log.exercises || []).reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
   const badges = [perfect ? `<span class="chip" style="background: #fff; color: var(--violet-text)">${ic('flame', 14, 'var(--violet-text)')}Semaine parfaite</span>` : '']
     .concat((log.ups || []).slice(0, 2).map((u) => `<span class="chip" style="background: #fff; color: var(--violet-text)">${ic('arrowUp', 14, 'var(--violet-text)', 2.4)}${esc(u)}</span>`)).join('');
-  const tiles = [[log.durationMin, 'minutes'], sets ? [sets, 'séries'] : log.km ? [fmtNum(log.km), 'km'] : null, log.watch?.kcal ? [log.watch.kcal, 'kcal'] : null].filter(Boolean);
+  const tiles = [[log.durationMin, 'minutes'], sets ? [sets, 'séries'] : log.km ? [fmtNum(log.km), 'km'] : log.speed ? [fmtNum(log.speed), 'km/h'] : null, log.incline ? [fmtNum(log.incline) + ' %', 'inclinaison'] : log.watch?.kcal ? [log.watch.kcal, 'kcal'] : null].filter(Boolean);
   return `<section class="kudos" style="margin-top: 18px" data-act="log-detail" data-id="${log.id}">
     ${conf}
     <div style="position: relative; width: 64px; height: 64px; border-radius: 32px; background: rgba(255,255,255,.18); display: flex; align-items: center; justify-content: center; margin-top: 12px">${ic('trophy', 32, '#fff')}</div>
@@ -504,6 +513,7 @@ function viewPlanning() {
     const isToday = dateKey(d) === dateKey(today);
     let right = '';
     if (s && done) right = `<span class="chip soft">${ic('check', 14, 'var(--violet-text)', 2.6)}Fait</span>`;
+    else if (s && state.skipped[dateKey(d)]) right = `<span class="chip grey">Annulée</span>`;
     else if (s && past && !s.optional && dateKey(d) >= state.settings.since) right = `<button class="chip warn" data-act="move-sheet" data-date="${dateKey(d)}">${ic('move', 14, 'var(--warn)')}Déplacer</button>`;
     else if (s && isToday) right = `<span class="chip solid">Aujourd'hui</span>`;
     else if (s && s.optional) right = `<span class="chip dashed">Optionnelle</span>`;
@@ -548,23 +558,36 @@ function moveSheet(fromKey) {
   const from = parseKey(fromKey);
   const s = sessionFor(from);
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const ws = weekStart(from);
-  const opts = DAYS3.map((dn, i) => {
-    const d = addDays(ws, i);
-    const busy = !!weekPlan(from)[i];
+  const start = weekStart(from) < weekStart(today) ? weekStart(today) : weekStart(from);
+  const dayBtn = (d) => {
+    const busy = !!slotFor(d);
     const ok = d >= today && dateKey(d) !== fromKey;
-    return `<button data-act="move-to" data-from="${fromKey}" data-to="${i}" ${ok ? '' : 'disabled'} style="height: 64px; border-radius: 12px; background: ${ok ? '#F4F2F8' : '#FAF9FC'}; color: ${ok ? 'var(--label)' : '#C9C5D6'}; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px">
-      <span style="font-size: 12px; font-weight: 600">${dn}</span><span style="font-size: 20px; font-weight: 700">${d.getDate()}</span>
-      ${ok && busy ? '<span style="font-size: 10px; color: var(--sec)">échange</span>' : ''}</button>`;
-  }).join('');
+    return `<button data-act="move-to" data-from="${fromKey}" data-to="${dateKey(d)}" ${ok ? '' : 'disabled'} style="height: 60px; border-radius: 12px; background: ${ok ? '#F4F2F8' : '#FAF9FC'}; color: ${ok ? 'var(--label)' : '#C9C5D6'}; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px">
+      <span style="font-size: 11px; font-weight: 600">${DAYS3[dayIdx(d)]}</span><span style="font-size: 18px; font-weight: 700">${d.getDate()}</span>
+      ${ok && busy ? '<span style="font-size: 9px; color: var(--sec)">échange</span>' : ''}</button>`;
+  };
+  const week = (ws, title) => `<div class="foot" style="font-weight: 600">${title}</div>
+    <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px">${Array.from({ length: 7 }, (_, i) => dayBtn(addDays(ws, i))).join('')}</div>`;
   return `<div class="row" style="justify-content: space-between; align-items: flex-start">
       <div><div style="font-size: 22px; font-weight: 700">Déplacer la séance</div>
-      <div class="sub" style="margin-top: 4px">${esc(s?.name || '')} · prévue ${DAYS[dayIdx(from)].toLowerCase()}</div></div>
+      <div class="sub" style="margin-top: 4px">${esc(s?.name || '')} · prévue ${DAYS[dayIdx(from)].toLowerCase()} ${from.getDate()}</div></div>
       <button class="x" data-act="close-sheet" aria-label="Fermer">${ic('close', 14, 'var(--sec)', 2.4)}</button>
     </div>
-    <div class="foot" style="font-weight: 600">Choisis un nouveau jour</div>
-    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">${opts}</div>
+    ${week(start, weekStart(start).getTime() === weekStart(today).getTime() ? 'Cette semaine' : `Semaine du ${fmtShort(start)}`)}
+    ${week(addDays(start, 7), `Semaine du ${fmtShort(addDays(start, 7))}`)}
     <div class="note">${ic('sparkle', 18, 'var(--violet-text)')}<span>Évite deux séances de jambes le même jour ou deux jours d'affilée. Si le jour choisi a déjà une séance, les deux s'échangent.</span></div>`;
+}
+
+// Déplace une séance vers n'importe quel jour (même semaine ou autre semaine)
+function moveSessionTo(fromKey, toKey) {
+  const from = parseKey(fromKey), to = parseKey(toKey);
+  if (wkKey(from) === wkKey(to)) return moveSession(dayIdx(from), dayIdx(to), from);
+  const pf = weekPlan(from).slice(), pt = weekPlan(to).slice();
+  const a = pf[dayIdx(from)], b = pt[dayIdx(to)];
+  pt[dayIdx(to)] = a || null;
+  pf[dayIdx(from)] = b || null;
+  setWeekPlan(from, pf); setWeekPlan(to, pt);
+  delete state.skipped[fromKey]; save('skipped');
 }
 
 // Enregistre une séance faite sans passer par l'écran de séance (coach ou menu du planning)
@@ -635,12 +658,14 @@ function daySheet(dk) {
     ${placePicker(s)}${optPicker(s)}
     ${whySession(s)}
     ${sessionPreview(s)}
-    ${dk === dateKey() ? `<button class="btn p block" data-act="start" data-date="${dk}">${ic('play', 16, '#fff')}Commencer la séance</button>` : ''}
+    ${dk === dateKey() && !done ? (s.exercises ? `<button class="btn p block" data-act="start" data-date="${dk}">${ic('play', 16, '#fff')}Commencer la séance</button>` : `<button class="btn p block" data-act="done-quick" data-date="${dk}">${ic('check', 16, '#fff', 2.6)}Séance faite</button>`) : ''}
     ${!done && d <= today ? `<div class="stack" style="gap: 8px"><div class="foot" style="font-weight: 600">Tu l'as faite sans l'app ?</div>
       <div class="grid2"><label class="stack" style="gap: 4px"><span class="foot">Durée (min)</span><input class="field" id="md-min" inputmode="numeric" placeholder="${s.minutes}"></label>
       <label class="stack" style="gap: 4px"><span class="foot">${s.kind === 'course' ? 'Distance (km)' : 'FC moyenne'}</span><input class="field" id="md-x" inputmode="decimal" placeholder="—"></label></div>
       <button class="btn t block" data-act="mark-done" data-date="${dk}">${ic('check', 16, 'var(--violet-text)', 2.6)}Marquer comme faite</button></div>` : ''}
     ${!done && d >= today ? `<button class="btn t block" data-act="move-sheet" data-date="${dk}">${ic('move', 16, 'var(--violet-text)')}Déplacer</button>` : ''}
+    ${!done && !state.skipped[dk] ? `<button class="btn w block" data-act="skip" data-date="${dk}" style="color: var(--warn); box-shadow: inset 0 0 0 1px var(--sep)">${state.confirmSkip === dk ? 'Confirmer : séance annulée' : 'Annuler cette séance'}</button>` : ''}
+    ${state.skipped[dk] ? `<button class="btn t block" data-act="unskip" data-date="${dk}">Rétablir la séance</button>` : ''}
     ${!done && (slotFor(d)?.custom) ? `<button class="btn t block" data-act="reset-day" data-date="${dk}">${ic('refresh', 16, 'var(--violet-text)')}Revenir à la séance prévue</button>` : ''}
     ${!done ? `<button class="btn w block" data-act="remove-day" data-date="${dk}" style="color: #C62F3C; box-shadow: inset 0 0 0 1px var(--sep)">Retirer de la semaine</button>` : '<div class="chip soft" style="align-self: flex-start">Séance déjà enregistrée</div>'}`;
 }
@@ -735,22 +760,22 @@ function viewProgramme() {
 }
 
 // ─────────────────────────── Séance en cours
-function startSession(dk) {
+function startSession(dk, quick = false) {
   const d = parseKey(dk);
   const s = sessionFor(d);
   if (!s) return;
   state.active = {
     date: dk, key: s.key, name: s.name, kind: s.kind, week: s.week, optional: s.optional, custom: s.custom ? slotFor(d).custom : null,
-    startedAt: Date.now(), idx: 0,
+    startedAt: quick ? null : Date.now(), idx: 0, planned: s.minutes || null, choice: s.choice || null,
     exercises: (s.exercises || []).map((e) => {
       const ex = EXERCISES[e.id];
       return { id: e.id, changed: false, sets: Array.from({ length: e.sets }, () => ({ kg: e.load != null && ex.unit !== 'time' ? fmtNum(e.load) : '', reps: '', done: false })) };
     }),
     steps: (s.steps || []).map(() => false),
-    cardio: { min: '', km: '' },
+    cardio: { min: '', km: '', speed: '', incline: '' },
   };
   save('active');
-  state.view = 'workout';
+  state.view = quick ? 'finish' : 'workout';
   render(); scrollTo(0, 0);
 }
 
@@ -897,20 +922,31 @@ function viewFinish() {
   const a = state.active;
   const sets = a.exercises.reduce((n, e) => n + e.sets.filter((x) => x.done).length, 0);
   const exDone = a.exercises.filter((e) => e.sets.some((x) => x.done)).length;
-  const min = Math.max(1, Math.round((Date.now() - a.startedAt) / 60000));
   const w = a.watch || {};
+  const min = parseNum(w.duration) || parseNum(a.cardio.min) || (a.startedAt ? Math.max(1, Math.round((Date.now() - a.startedAt) / 60000)) : '—');
   const f = a.feeling || '';
+  const isWalk = (a.choice || state.optChoice[a.date]) === 'marche';
   const tiles = a.kind === 'salle'
     ? [[min, 'minutes'], [sets, 'séries'], [`${exDone}/${a.exercises.length}`, 'exercices']]
-    : [[a.cardio.min || min, 'minutes'], [a.cardio.km ? fmtNum(parseNum(a.cardio.km)) : '—', 'km'], [a.steps.filter(Boolean).length + '/' + a.steps.length, 'étapes']];
+    : isWalk ? [[min, 'minutes'], [a.cardio.speed ? fmtNum(parseNum(a.cardio.speed)) : '—', 'km/h'], [a.cardio.incline ? fmtNum(parseNum(a.cardio.incline)) + ' %' : '—', 'inclinaison']]
+    : [[min, 'minutes'], [a.cardio.km ? fmtNum(parseNum(a.cardio.km)) : '—', 'km'], [w.hr || '—', 'FC moy.']];
   return `
-  <button class="link" data-act="tab" data-v="workout" style="margin: -6px -6px 0">${ic('chevL', 22, 'var(--violet-text)', 2.4)}Séance</button>
+  ${a.startedAt ? `<button class="link" data-act="tab" data-v="workout" style="margin: -6px -6px 0">${ic('chevL', 22, 'var(--violet-text)', 2.4)}Séance</button>` : `<button class="link" data-act="abandon-quick" style="margin: -6px -6px 0">${ic('chevL', 22, 'var(--violet-text)', 2.4)}Retour</button>`}
   <div class="stack center" style="align-items: center; gap: 6px; margin-top: 10px">
     <div style="width: 72px; height: 72px; border-radius: 36px; background: var(--violet); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 10px var(--violet-soft)">${ic('check', 36, '#fff', 3)}</div>
     <h1 class="lt" style="margin-top: 14px">Bien joué !</h1>
     <div class="sub">${esc(a.name)}</div>
   </div>
   <div class="grid3" style="margin-top: 20px">${tiles.map(([v, l]) => `<div class="card center" style="padding: 12px 8px"><div class="big" style="color: var(--violet-text)">${v}</div><div class="foot">${l}</div></div>`).join('')}</div>
+
+  ${a.kind !== 'salle' ? `<h2 class="sec">Ta séance</h2>
+  <section class="list">
+    <label class="li"><span class="grow" style="font-size: 16px">Durée</span><input inputmode="numeric" data-cardio="min" value="${esc(a.cardio.min)}" placeholder="${a.planned || '—'}" style="width: 80px; border: 0; text-align: right; font-size: 17px; font-weight: 700; outline: none"><span class="unit" style="width: 40px">min</span></label>
+    ${isWalk ? `
+    <label class="li"><span class="grow" style="font-size: 16px">Vitesse</span><input inputmode="decimal" data-cardio="speed" value="${esc(a.cardio.speed || '')}" placeholder="—" style="width: 80px; border: 0; text-align: right; font-size: 17px; font-weight: 700; outline: none"><span class="unit" style="width: 40px">km/h</span></label>
+    <label class="li"><span class="grow" style="font-size: 16px">Inclinaison</span><input inputmode="decimal" data-cardio="incline" value="${esc(a.cardio.incline || '')}" placeholder="—" style="width: 80px; border: 0; text-align: right; font-size: 17px; font-weight: 700; outline: none"><span class="unit" style="width: 40px">%</span></label>` : `
+    <label class="li"><span class="grow" style="font-size: 16px">Distance</span><input inputmode="decimal" data-cardio="km" value="${esc(a.cardio.km)}" placeholder="—" style="width: 80px; border: 0; text-align: right; font-size: 17px; font-weight: 700; outline: none"><span class="unit" style="width: 40px">km</span></label>`}
+  </section>` : ''}
 
   <h2 class="sec">Données Apple Watch</h2>
   <section class="card stack">
@@ -940,12 +976,18 @@ function saveSession() {
   const w = a.watch || {};
   const log = {
     id: uid(), dateKey: a.date, savedAt: new Date().toISOString(), key: a.key, name: a.name, kind: a.kind, week: a.week, optional: !!a.optional,
-    durationMin: parseNum(w.duration) || parseNum(a.cardio.min) || Math.max(1, Math.round((Date.now() - a.startedAt) / 60000)),
+    durationMin: parseNum(w.duration) || parseNum(a.cardio.min) || (a.startedAt ? Math.max(1, Math.round((Date.now() - a.startedAt) / 60000)) : a.planned || 30),
     feeling: a.feeling || null,
     watch: { kcal: parseNum(w.kcal), hr: parseNum(w.hr) },
   };
   if (a.kind === 'salle') log.exercises = a.exercises.map((e) => ({ id: e.id, changed: e.changed, sets: e.sets.map((x) => ({ kg: x.kg, reps: x.reps, done: x.done })) }));
-  else log.km = parseNum(a.cardio.km);
+  else {
+    log.km = parseNum(a.cardio.km);
+    if (a.cardio.speed) log.speed = parseNum(a.cardio.speed);
+    if (a.cardio.incline) log.incline = parseNum(a.cardio.incline);
+    if (a.choice || state.optChoice[a.date]) log.choice = a.choice || state.optChoice[a.date];
+  }
+  delete state.skipped[a.date]; save('skipped');
   log.ups = applyProgression(log);
   state.logs.push(log);
   state.active = null; state.rest = null;
@@ -987,7 +1029,7 @@ function lineChart(points, color, band) {
 function viewProgress() {
   const ws = weekStart();
   const weeks = Array.from({ length: 6 }, (_, i) => addDays(ws, -7 * (5 - i)));
-  const perWeek = weeks.map((w) => state.logs.filter((l) => { const t = parseKey(l.dateKey); return t >= w && t < addDays(w, 7) && !l.optional; }).length);
+  const perWeek = weeks.map((w) => state.logs.filter((l) => { const t = parseKey(l.dateKey); return t >= w && t < addDays(w, 7); }).length);
   const days = Array.from({ length: 7 }, (_, i) => addDays(new Date(), i - 6));
   const sleep = days.map((d) => (state.health[dateKey(d)]?.sleepMin || 0) / 60);
   const sleepKnown = sleep.filter(Boolean);
@@ -1027,7 +1069,8 @@ function viewProgress() {
   <h2 class="sec">Tendances</h2>
   <section class="card stack" style="gap: 6px">
     <div class="hdr" style="color: var(--violet-text)">${ic('flame', 16, 'var(--violet-text)')}Séances par semaine</div>
-    <div><span class="big">${perWeek[5]}</span><span class="unit"> cette semaine · objectif 3</span></div>
+    <div><span class="big">${perWeek[5]}</span><span class="unit"> cette semaine (bonus compris) · objectif 3</span></div>
+    <div class="foot">Chaque barre = une semaine, étiquetée par la date de son lundi.</div>
     ${bars(perWeek, weeks.map((w) => `${w.getDate()}/${w.getMonth() + 1}`), 'var(--violet)', 3, 4)}
   </section>
 
@@ -1459,6 +1502,8 @@ function logDetail(id) {
     pace ? [`${Math.floor(pace)}:${pad(Math.round((pace % 1) * 60))}`, '/km', 'Allure'] : null,
     l.watch?.hr ? [Math.round(l.watch.hr), 'BPM', 'FC moyenne'] : null,
     l.watch?.kcal ? [Math.round(l.watch.kcal), 'kcal', 'Calories actives'] : null,
+    l.speed ? [fmtNum(l.speed), 'km/h', 'Vitesse'] : null,
+    l.incline != null && l.incline !== '' ? [fmtNum(l.incline), '%', 'Inclinaison'] : null,
   ].filter(Boolean);
   const ex = (l.exercises || []).filter((e) => e.sets.some((x) => x.done));
   return `<div class="row" style="justify-content: space-between; align-items: flex-start">
@@ -1486,7 +1531,7 @@ function logSheet(id) {
   const f = (k, label, v, mode = 'decimal') => `<label class="stack" style="gap: 4px"><span class="foot">${label}</span><input class="field" id="lg-${k}" inputmode="${mode}" value="${v != null ? esc(fmtNum(v)) : ''}" placeholder="—"></label>`;
   return `<div class="row" style="justify-content: space-between"><div><div style="font-size: 20px; font-weight: 700">${esc(l.name)}</div><div class="sub">${fmtDay(parseKey(l.dateKey))}</div></div>
       <button class="x" data-act="close-sheet" aria-label="Fermer">${ic('close', 14, 'var(--sec)', 2.4)}</button></div>
-    <div class="grid2">${f('min', 'Durée (min)', l.durationMin, 'numeric')}${f('km', 'Distance (km)', l.km)}${f('hr', 'FC moyenne', l.watch?.hr, 'numeric')}${f('kcal', 'Calories actives', l.watch?.kcal, 'numeric')}</div>
+    <div class="grid2">${f('min', 'Durée (min)', l.durationMin, 'numeric')}${f('km', 'Distance (km)', l.km)}${f('hr', 'FC moyenne', l.watch?.hr, 'numeric')}${f('kcal', 'Calories actives', l.watch?.kcal, 'numeric')}${l.choice === 'marche' || l.speed || l.incline ? f('speed', 'Vitesse (km/h)', l.speed) + f('incline', 'Inclinaison (%)', l.incline) : ''}</div>
     <button class="btn p block" data-act="save-log" data-id="${l.id}">Enregistrer</button>
     <button class="link danger" data-act="del-log" data-id="${l.id}" style="font-size: 15px; align-self: center">${state.confirmDel === l.id ? 'Confirmer la suppression' : 'Supprimer cette séance'}</button>`;
 }
@@ -1525,6 +1570,14 @@ const ACTIONS = {
   'sleep-coach': (t) => sleepCoach(t.dataset.key),
   'sleep-night': (t) => { state.sleepDay = t.dataset.key || null; render(); scrollTo(0, 0); },
   'sleep-toggle': (t) => { state.sleepOpen = { ...(state.sleepOpen || {}), [t.dataset.k]: !(state.sleepOpen || {})[t.dataset.k] }; const y = scrollY; render(); scrollTo(0, y); },
+  'done-quick': (t) => { state.sheet = null; startSession(t.dataset.date, true); scrollTo(0, 0); },
+  'abandon-quick': () => { state.active = null; save('active'); state.view = 'today'; render(); },
+  skip: (t) => {
+    const dk = t.dataset.date;
+    if (state.confirmSkip !== dk) { state.confirmSkip = dk; render(); return; }
+    state.skipped[dk] = true; state.confirmSkip = null; state.sheet = null; save('skipped'); render(); toast('Séance annulée');
+  },
+  unskip: (t) => { delete state.skipped[t.dataset.date]; save('skipped'); render(); },
   'mark-done': (t) => {
     const dk = t.dataset.date;
     const s = sessionFor(parseKey(dk));
@@ -1541,7 +1594,7 @@ const ACTIONS = {
   },
   'remove-day': (t) => { removeDay(t.dataset.date); state.sheet = null; render(); toast('Séance retirée de la semaine'); },
   'move-sheet': (t) => { state.sheet = { type: 'move', arg: t.dataset.date }; render(); },
-  'move-to': (t) => { moveSession(dayIdx(parseKey(t.dataset.from)), +t.dataset.to, parseKey(t.dataset.from)); state.sheet = null; toast(`Séance déplacée à ${DAYS[+t.dataset.to].toLowerCase()}`); render(); },
+  'move-to': (t) => { moveSessionTo(t.dataset.from, t.dataset.to); const d = parseKey(t.dataset.to); state.sheet = null; toast(`Séance déplacée au ${DAYS[dayIdx(d)].toLowerCase()} ${d.getDate()}`); render(); },
   'reset-week': () => { delete state.plan[wkKey(addDays(weekStart(), state.weekOffset * 7))]; save('plan'); render(); },
   'close-sheet': () => { state.sheet = null; render(); },
   'ex-next': () => { state.active.idx++; save('active'); render(); scrollTo(0, 0); },
@@ -1583,6 +1636,7 @@ const ACTIONS = {
     const l = state.logs.find((x) => x.id === t.dataset.id);
     const v = (k) => parseNum($('#lg-' + k).value);
     l.durationMin = v('min') || l.durationMin; l.km = v('km');
+    if ($('#lg-speed')) { l.speed = v('speed'); l.incline = v('incline'); }
     l.watch = { ...(l.watch || {}), hr: v('hr'), kcal: v('kcal') };
     save('logs'); state.sheet = null; render(); toast('Séance modifiée ✓');
   },

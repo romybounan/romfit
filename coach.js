@@ -1,48 +1,56 @@
 // RomFit — coach IA (Gemini). La clé API est stockée sur le téléphone et envoyée uniquement à Google.
 
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
-const FALLBACK_MODEL = 'gemini-2.5-flash';
+// Modèles : on lit la liste des modèles disponibles sur le compte (Google en retire régulièrement),
+// puis on essaie les « flash » du plus récent au plus ancien, les « lite » en dernier.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const modelRank = (n) => {
+  const v = parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) || [0, 0])[1]);
+  return (/lite/.test(n) ? 0 : 100) + v * 10 - (/preview/.test(n) ? 1 : 0);
+};
 
-async function pickModel() {
-  if (state.settings.model) return state.settings.model;
+async function listModels(force) {
+  const st = state.settings;
+  if (!force && st.models?.length && Date.now() - (st.modelsAt || 0) < 12 * 3600e3) return st.models;
   try {
-    const r = await fetch(`${GEMINI}/models?pageSize=200`, { headers: { 'x-goog-api-key': state.settings.apiKey } });
+    const r = await fetch(`${GEMINI}/models?pageSize=200`, { headers: { 'x-goog-api-key': st.apiKey } });
     const data = await r.json();
     const names = (data.models || [])
       .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
       .map((m) => m.name.replace('models/', ''))
-      .filter((n) => /flash/.test(n) && !/lite|image|tts|audio|live|thinking|exp/.test(n));
-    const best = names.find((n) => /^gemini-3.*flash$/.test(n)) || names.find((n) => /^gemini-3.*flash/.test(n)) || names.find((n) => n === FALLBACK_MODEL) || names[0];
-    state.settings.model = best || FALLBACK_MODEL;
-  } catch { state.settings.model = FALLBACK_MODEL; }
-  save('settings');
-  return state.settings.model;
+      .filter((n) => /^gemini-.*flash/.test(n) && !/image|tts|audio|live|thinking|exp|embedding|native/.test(n))
+      .sort((a, b) => modelRank(b) - modelRank(a));
+    if (names.length) { st.models = names; st.modelsAt = Date.now(); st.badModels = []; save('settings'); }
+  } catch {}
+  return st.models || [];
 }
 
-// Appel à Gemini avec relance automatique : si un modèle est surchargé (503) ou à sa limite (429),
-// on réessaie puis on passe au modèle gratuit suivant.
-const BACKUP_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
+// Appel à Gemini avec relance automatique : modèle surchargé (503) → on réessaie ;
+// modèle retiré (404) ou à sa limite (429) → on passe au suivant.
 async function gemini(contents, opts = {}) {
   if (!state.settings.apiKey) throw new Error('nokey');
-  const first = await pickModel();
-  const models = [...new Set([first, ...BACKUP_MODELS])];
   let lastErr;
-  for (const model of models) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        return await geminiOnce(model, contents, opts);
-      } catch (e) {
-        lastErr = e;
-        if (e.status === 404) break;                       // modèle indisponible : suivant
-        if (e.status === 503 || e.status === 500) { await sleep(attempt ? 3000 : 1200); continue; } // surcharge : on réessaie
-        if (e.status === 429) break;                       // limite de ce modèle : suivant
-        throw e;                                           // autre erreur : on arrête
+  for (let round = 0; round < 2; round++) {
+    const bad = new Set(state.settings.badModels || []);
+    const models = (await listModels(round > 0)).filter((m) => !bad.has(m)).slice(0, 5);
+    for (const model of models) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const res = await geminiOnce(model, contents, opts);
+          if (state.settings.model !== model) { state.settings.model = model; save('settings'); }
+          return res;
+        } catch (e) {
+          lastErr = e;
+          if (e.status === 404) { state.settings.badModels = [...bad.add(model)]; save('settings'); break; }
+          if (e.status === 503 || e.status === 500) { await sleep(attempt ? 3000 : 1200); continue; }
+          if (e.status === 429) break;
+          throw e;
+        }
       }
     }
+    if (lastErr?.status !== 404) break;   // on ne relit la liste que si des modèles ont été retirés
   }
-  throw lastErr?.status === 429 ? new Error('quota') : lastErr?.status === 503 ? new Error('busy') : lastErr;
+  throw lastErr?.status === 429 ? new Error('quota') : lastErr?.status === 503 ? new Error('busy') : (lastErr || new Error('Aucun modèle Gemini disponible sur ta clé.'));
 }
 
 async function geminiOnce(model, contents, { system, schema, loose } = {}) {
@@ -123,7 +131,7 @@ function coachContext() {
   const week = weekNo(now);
   const days = Array.from({ length: 14 }, (_, i) => addDays(ws, i)).map((d) => {
     const s = sessionFor(d);
-    return { date: dateKey(d), jour: DAYS[dayIdx(d)], seance: s ? { nom: s.name, type: s.kind, optionnelle: !!s.optional, minutes: s.minutes } : null, faite: doneOn(d), heure: state.hours[dateKey(d)] || null };
+    return { date: dateKey(d), jour: DAYS[dayIdx(d)], seance: s ? { nom: s.name, type: s.kind, optionnelle: !!s.optional, minutes: s.minutes } : null, faite: doneOn(d), annulee: !!state.skipped?.[dateKey(d)], heure: state.hours[dateKey(d)] || null };
   });
   const recent = state.logs.slice(-12).map((l) => ({
     date: l.dateKey, seance: l.name, type: l.kind, minutes: l.durationMin, ressenti: l.feeling, km: l.km || undefined, fc_moy: l.watch?.hr || undefined,
@@ -162,7 +170,7 @@ Règles :
   • "log_session" : enregistrer une séance qu'elle a faite (date, et log : name, kind, minutes, km, fc_moyenne, kcal, ressenti Facile/Bien/Dur). N'invente aucun chiffre : mets seulement ceux qu'elle donne.
   • "remove_session" : retirer une séance prévue du planning (date). Une action par jour.
   • "replace_session" : remplacer la séance d'un jour (date + session). Si elle veut changer le sport du jour, donne d'abord ton avis honnête (récupération, équilibre de la semaine, sommeil). Pour la salle, uniquement des exercise_ids de la liste fournie ; pour le cardio ou une activité douce, des steps avec des minutes.
-  • "move_session" : déplacer une séance (date d'origine, to_date dans la même semaine).
+  • "move_session" : déplacer une séance (date d'origine, to_date : n'importe quel jour à partir d'aujourd'hui, y compris la semaine suivante).
 - Si aucune modification n'est nécessaire, "actions" est une liste vide.
 - Pause kiné (voir profil.pause_kine) : pendant ces dates, ne propose JAMAIS d'exercice qui sollicite les épaules ou les bras (tirages, développés, curls, triceps, pompes, gainage sur les bras, haltères tenus en main). Utilise les exercices sans charge sur le haut du corps : hip-thrust, presse-cuisses, leg-curl, leg-extension, presse-une-jambe, abduction-machine, kickback-poulie, hyperextension, pont-unilateral, fentes-bulgares-pdc, releve-jambes, dead-bug.
 - Signes d'alerte (douleur dans la poitrine, malaise ou vertige, palpitations inhabituelles, essoufflement disproportionné) : arrêt immédiat de l'effort et consultation médicale. Tu n'es pas médecin.
@@ -256,8 +264,7 @@ function applyAction(i) {
       setWeekPlan(d, plan);
       done.push('séance remplacée');
     } else if (a.type === 'move_session' && a.to_date) {
-      const to = parseKey(a.to_date);
-      if (wkKey(to) === wkKey(d)) { moveSession(dayIdx(d), dayIdx(to), d); done.push('séance déplacée'); }
+      moveSessionTo(a.date, a.to_date); done.push('séance déplacée');
     } else if (a.type === 'remove_session') {
       removeDay(a.date); done.push('séance retirée');
     } else if (a.type === 'log_session') {
