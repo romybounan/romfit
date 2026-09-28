@@ -1,6 +1,6 @@
 // RomFit — app (vues, programme, progression, planning, suivi). Données stockées sur le téléphone.
 
-const APP_VERSION = 'v48';
+const APP_VERSION = 'v49';
 
 // ─────────────────────────── Stockage
 const store = {
@@ -1521,22 +1521,49 @@ function sleepStages(phases, durees, debuts, num) {
     if (n == null) return 0;
     return clockFormat || n > 90 ? n / 60 : n;   // nombre seul = secondes
   };
+  // Date et heure complètes du début de chaque phase (« 28 sept 2026, 1:52 », « 28/9/26, 1:52 », etc.)
+  const MONTHS = { ene: 0, jan: 0, feb: 1, fev: 1, mar: 2, abr: 3, avr: 3, apr: 3, may: 4, mai: 4, jun: 5, jui: 5, jul: 6, ago: 7, aou: 7, aug: 7, sep: 8, oct: 9, nov: 10, dic: 11, dec: 11 };
+  const now = new Date();
+  const toDate = (v) => {
+    const t = String(v).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const times = [...t.matchAll(/(\d{1,2})[:h](\d{2})(?::\d{2})?/g)];
+    const tm = times[times.length - 1];
+    if (!tm) return null;
+    let y = now.getFullYear(), mo = null, d = null;
+    let m = t.match(/(\d{1,2})\s+(?:de\s+)?([a-z]{3,})\.?\s*(?:de\s+)?(\d{4})?/);
+    if (m && MONTHS[m[2].slice(0, 3)] != null) { d = +m[1]; mo = MONTHS[m[2].slice(0, 3)]; if (m[3]) y = +m[3]; }
+    else if ((m = t.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/))) { d = +m[1]; mo = +m[2] - 1; y = +m[3] < 100 ? 2000 + +m[3] : +m[3]; }
+    if (d == null) return null;
+    // Pour « 12:30 PM » éventuel
+    let h = +tm[1]; if (/pm/.test(t) && h < 12) h += 12; if (/am/.test(t) && h === 12) h = 0;
+    return new Date(y, mo, d, h, +tm[2]);
+  };
   const toTime = (v) => { const all = [...String(v).matchAll(/(\d{1,2})[:h](\d{2})(?::\d{2})?/g)]; const m = all[all.length - 1]; return m ? +m[1] + +m[2] / 60 : null; };
+  let items = phases.map((p, i) => ({ st: STAGE_OF(p), m: toMin(durees[i]), at: toDate(debuts[i]), t: toTime(debuts[i]) })).filter((x) => x.st);
+  let nightKey = null;
+  if (items.length && items.every((x) => x.at)) {
+    // Plusieurs nuits dans la fenêtre de 24 h : on les sépare (trou de plus de 3 h) et on garde la dernière
+    items.sort((a, b) => a.at - b.at);
+    let start = 0;
+    for (let i = 1; i < items.length; i++) {
+      const prevEnd = items[i - 1].at.getTime() + items[i - 1].m * 60000;
+      if (items[i].at.getTime() - prevEnd > 3 * 3600e3) start = i;
+    }
+    items = items.slice(start);
+    const last = items[items.length - 1];
+    const wake = new Date(last.at.getTime() + last.m * 60000);
+    const mid = new Date(wake.getFullYear(), wake.getMonth(), wake.getDate());
+    items.forEach((x) => { x.t = (x.at - mid) / 3600e3 + 24; });   // heures depuis la veille à minuit
+    nightKey = dateKey(wake);
+  } else {
+    items.forEach((x) => { if (x.t != null && x.t < 15) x.t += 24; });
+    items.sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
+  }
   const totals = { rem: 0, deep: 0, core: 0, awake: 0, asleep: 0 };
-  const segs = [];
-  phases.forEach((p, i) => {
-    const st = STAGE_OF(p);
-    if (!st) return;
-    const m = toMin(durees[i]);
-    totals[st] += m;
-    const t = toTime(debuts[i]);
-    if (t != null) segs.push({ st, t, m });
-  });
+  items.forEach((x) => { totals[x.st] += x.m; });
   Object.keys(totals).forEach((k) => { totals[k] = Math.round(totals[k]); });
-  // Remet les débuts dans l'ordre de la nuit (après minuit = +24 h)
-  segs.forEach((x) => { if (x.t < 15) x.t += 24; });
-  segs.sort((a, b) => a.t - b.t);
-  return { ...totals, segs: segs.map((x) => ({ st: x.st, t: Math.round(x.t * 100) / 100, m: Math.round(x.m * 10) / 10 })) };
+  const segs = items.filter((x) => x.t != null).map((x) => ({ st: x.st, t: Math.round(x.t * 100) / 100, m: Math.round(x.m * 10) / 10 }));
+  return { ...totals, segs, nightKey };
 }
 
 function importHealth(text) {
@@ -1552,10 +1579,16 @@ function importHealth(text) {
       ?? (Array.isArray(d.sommeil_segments) ? d.sommeil_segments.reduce((a, b) => a + (+b || 0), 0) : null);
     if (sleepMin != null && !isNaN(sleepMin)) cur.sleepMin = Math.round(sleepMin);
     if (d.phases) {
-      cur.stages = d.phases;
-      // Avec les phases, le temps de sommeil exclut les éveils (comme l'app Salud)
-      const asleep = d.phases.rem + d.phases.deep + d.phases.core + d.phases.asleep;
-      if (asleep) cur.sleepMin = asleep;
+      // La nuit est rangée au jour du réveil ; avec les phases, le sommeil exclut les éveils (comme l'app Salud)
+      const nk = d.phases.nightKey || key;
+      const night = nk === key ? cur : (state.health[nk] = state.health[nk] || {});
+      const { nightKey, ...stages } = d.phases;
+      night.stages = stages;
+      const asleep = stages.rem + stages.deep + stages.core + stages.asleep;
+      if (asleep) night.sleepMin = asleep;
+      if (nk !== key) { delete cur.sleepMin; delete cur.stages; }
+      if (nk !== key && Object.keys(cur).length === 0) { state.health[key] = cur; }
+      state.lastNight = nk;
     }
     if (d.fc_repos != null) cur.restHR = +d.fc_repos;
     if (d.pas != null) cur.steps = +d.pas;
